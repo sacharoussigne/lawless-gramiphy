@@ -9,6 +9,7 @@ import {
   Text,
   Title,
   TextInput,
+  Slider,
 } from '@mantine/core';
 import {
   IconAlertCircle,
@@ -224,6 +225,22 @@ export default function PlaylistDetailsPageClient({ playlist }: PlaylistDetailsP
             onChange={(event: React.ChangeEvent<HTMLInputElement>) => setSearch(event.currentTarget.value)}
             size="sm"
           />
+
+          <Group justify="space-between" align="center" wrap="nowrap" gap="md">
+            <Text size="xs" c="dimmed">
+              Volume
+            </Text>
+            <div style={{ flex: 1, minWidth: 160 }}>
+              <Slider
+                value={Math.round((audioPlayer.volume ?? 1) * 100)}
+                min={0}
+                max={100}
+                step={1}
+                onChange={(v) => audioPlayer.setVolume((v as number) / 100)}
+                size="sm"
+              />
+            </div>
+          </Group>
 
           {filteredTracks.length === 0 ? (
             <Text c="dimmed" ta="center" py="xl">

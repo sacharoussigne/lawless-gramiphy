@@ -10,6 +10,7 @@ import {
   Group,
   Modal,
   ScrollArea,
+  Slider,
   Stack,
   Text,
   TextInput,
@@ -291,6 +292,22 @@ export default function TrackDetailsPageClient({ track }: { track: Track }) {
               </Text>
             </Group>
           </Stack>
+
+          <Group justify="flex-end" align="center" gap="xs">
+            <Text size="xs" c="dimmed">
+              Volume
+            </Text>
+            <div style={{ width: 190 }}>
+              <Slider
+                value={Math.round((audioPlayer.volume ?? 1) * 100)}
+                min={0}
+                max={100}
+                step={1}
+                onChange={(v) => audioPlayer.setVolume((v as number) / 100)}
+                size="xs"
+              />
+            </div>
+          </Group>
 
           <Group justify="space-between" wrap="nowrap">
             <Button variant="default" leftSection={<IconCopy size={14} />} onClick={handleCopy}>

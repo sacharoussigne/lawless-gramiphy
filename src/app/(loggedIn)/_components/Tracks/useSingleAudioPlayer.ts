@@ -13,10 +13,12 @@ export default function useSingleAudioPlayer() {
   const [isPlaying, setIsPlaying] = useState(false);
   const [duration, setDuration] = useState(0);
   const [position, setPosition] = useState(0);
+  const [volume, setVolumeState] = useState(0.5);
 
   useEffect(() => {
     const audio = new Audio();
     audio.preload = 'metadata';
+    audio.volume = volume;
     audioRef.current = audio;
 
     const handleTimeUpdate = () => setPosition(audio.currentTime || 0);
@@ -46,10 +48,16 @@ export default function useSingleAudioPlayer() {
     };
   }, []);
 
+  useEffect(() => {
+    if (!audioRef.current) return;
+    audioRef.current.volume = volume;
+  }, [volume]);
+
   const togglePlay = useCallback(
     async ({ trackId, src }: TogglePlayParams) => {
       const audio = audioRef.current;
       if (!audio) return;
+      audio.volume = volume;
 
       if (currentTrackId === trackId) {
         if (audio.paused) {
@@ -99,6 +107,11 @@ export default function useSingleAudioPlayer() {
     progressRatio,
     togglePlay,
     seekTo,
+    volume,
+    setVolume: (nextVolume: number) => {
+      const clamped = Math.min(1, Math.max(0, nextVolume));
+      setVolumeState(clamped);
+    },
   };
 }
 

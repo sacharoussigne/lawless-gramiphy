@@ -14,6 +14,7 @@ import {
   Select,
   Group as MantineGroup,
   Modal,
+  Slider,
   ScrollArea,
 } from '@mantine/core';
 import {
@@ -302,8 +303,23 @@ export default function LibraryPageClient({ initialTracks }: LibraryPageClientPr
         </Card>
 
         <Stack gap="md">
-          <Group justify="space-between" align="flex-end">
+          <Group justify="space-between" align="center" wrap="nowrap" gap="md">
             <Title order={2}>Musiques ({filteredTracks.length})</Title>
+            <Group gap="xs" align="center" style={{ minWidth: 240 }}>
+              <Text size="xs" c="dimmed">
+                Volume
+              </Text>
+              <div style={{ flex: 1, minWidth: 120 }}>
+                <Slider
+                  value={Math.round((audioPlayer.volume ?? 1) * 100)}
+                  min={0}
+                  max={100}
+                  step={1}
+                  onChange={(v) => audioPlayer.setVolume((v as number) / 100)}
+                  size="sm"
+                />
+              </div>
+            </Group>
           </Group>
 
           <Card withBorder radius="md" p="sm">
