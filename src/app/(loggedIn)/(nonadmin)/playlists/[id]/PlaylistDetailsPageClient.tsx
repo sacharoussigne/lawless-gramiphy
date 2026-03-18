@@ -12,14 +12,26 @@ import {
   SimpleGrid,
   TextInput,
   Divider,
+  Image,
 } from '@mantine/core';
-import { IconAlertCircle, IconMusic, IconTrash, IconCopy, IconCheck, IconPlayerPlay, IconPlaylist } from '@tabler/icons-react';
+import {
+  IconAlertCircle,
+  IconMusic,
+  IconTrash,
+  IconCopy,
+  IconCheck,
+  IconPlayerPlay,
+  IconPlaylist,
+} from '@tabler/icons-react';
 import { useRouter } from 'next/navigation';
-import { addCollaborator, removeCollaborator, removeTrackFromPlaylist } from '@/app/_actions/playlists';
+import {
+  addCollaborator,
+  removeCollaborator,
+  removeTrackFromPlaylist,
+} from '@/app/_actions/playlists';
 import { handleAction } from '@/lib/action';
 import { notifications } from '@mantine/notifications';
 import { useMemo, useState } from 'react';
-import { Image } from '@mantine/core';
 import Link from 'next/link';
 import { routes } from '@/types/routes';
 
@@ -65,9 +77,7 @@ function formatDuration(s: number | null) {
   return `${m}:${sec.toString().padStart(2, '0')}`;
 }
 
-export default function PlaylistDetailsPageClient({
-  playlist,
-}: PlaylistDetailsPageClientProps) {
+export default function PlaylistDetailsPageClient({ playlist }: PlaylistDetailsPageClientProps) {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [removingId, setRemovingId] = useState<string | null>(null);
@@ -195,8 +205,8 @@ export default function PlaylistDetailsPageClient({
                   </Text>
                 )}
                 <Text c="dimmed" size="xs">
-                  Créée par {playlist.ownerName ?? 'Inconnu'} ·{' '}
-                  {playlist.tracks.length} piste{playlist.tracks.length > 1 ? 's' : ''}
+                  Créée par {playlist.ownerName ?? 'Inconnu'} · {playlist.tracks.length} piste
+                  {playlist.tracks.length > 1 ? 's' : ''}
                 </Text>
               </div>
             </Group>
@@ -207,7 +217,7 @@ export default function PlaylistDetailsPageClient({
               variant="subtle"
               leftSection={<IconPlaylist size={14} />}
               component={Link}
-              href={routes.gramophone.playlists}
+              href={routes.playlists.index}
             >
               Toutes les playlists
             </Button>
@@ -216,9 +226,9 @@ export default function PlaylistDetailsPageClient({
               variant="subtle"
               leftSection={<IconPlayerPlay size={14} />}
               component={Link}
-              href={routes.gramophone.index}
+              href={routes.library.index}
             >
-              Gramophone
+              Bibliothèque
             </Button>
           </Group>
         </Group>
@@ -298,12 +308,10 @@ export default function PlaylistDetailsPageClient({
 
         <Stack gap="md">
           <TextInput
-            placeholder="Rechercher dans la playlist (titre, artiste, uploader)"
+            placeholder="Rechercher (titre, artiste, uploader)"
             value={search}
-            onChange={(event: React.ChangeEvent<HTMLInputElement>) =>
-              setSearch(event.currentTarget.value)
-            }
-            size="xs"
+            onChange={(event: React.ChangeEvent<HTMLInputElement>) => setSearch(event.currentTarget.value)}
+            size="sm"
           />
 
           {filteredTracks.length === 0 ? (
@@ -311,7 +319,7 @@ export default function PlaylistDetailsPageClient({
               Aucune musique ne correspond à la recherche.
             </Text>
           ) : (
-            <SimpleGrid cols={3} spacing="md">
+            <SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }} spacing="md">
               {filteredTracks.map((track) => (
                 <Card key={track.id} withBorder radius="md" p="md">
                   <Group gap="md" align="flex-start" wrap="nowrap">
@@ -351,13 +359,7 @@ export default function PlaylistDetailsPageClient({
                           size="xs"
                           variant={copiedId === track.id ? 'light' : 'default'}
                           color={copiedId === track.id ? 'green' : undefined}
-                          leftSection={
-                            copiedId === track.id ? (
-                              <IconCheck size={14} />
-                            ) : (
-                              <IconCopy size={14} />
-                            )
-                          }
+                          leftSection={copiedId === track.id ? <IconCheck size={14} /> : <IconCopy size={14} />}
                           onClick={() => handleCopy(track)}
                         >
                           {copiedId === track.id ? 'Copié' : 'Copier'}
@@ -375,11 +377,7 @@ export default function PlaylistDetailsPageClient({
                           </Button>
                         )}
                       </Group>
-                      <audio
-                        controls
-                        src={track.s3Url}
-                        style={{ width: '100%', marginTop: '0.5rem' }}
-                      />
+                      <audio controls src={track.s3Url} style={{ width: '100%', marginTop: '0.5rem' }} />
                     </Stack>
                   </Group>
                 </Card>

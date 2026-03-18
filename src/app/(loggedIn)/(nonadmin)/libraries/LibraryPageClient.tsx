@@ -44,9 +44,9 @@ type Track = {
   s3Url: string;
   duration: number | null;
   thumbnail: string | null;
-   uploaderId: string | null;
-   uploaderName: string | null;
-   canDelete: boolean;
+  uploaderId: string | null;
+  uploaderName: string | null;
+  canDelete: boolean;
   createdAt: Date;
 };
 
@@ -62,7 +62,7 @@ type PlaylistSummary = {
   canEdit: boolean;
 };
 
-interface GramophonePageClientProps {
+interface LibraryPageClientProps {
   initialTracks: Track[];
 }
 
@@ -73,7 +73,7 @@ function formatDuration(s: number | null) {
   return `${m}:${sec.toString().padStart(2, '0')}`;
 }
 
-export default function GramophonePageClient({ initialTracks }: GramophonePageClientProps) {
+export default function LibraryPageClient({ initialTracks }: LibraryPageClientProps) {
   const router = useRouter();
   const [url, setUrl] = useState('');
   const [loading, setLoading] = useState(false);
@@ -88,18 +88,15 @@ export default function GramophonePageClient({ initialTracks }: GramophonePageCl
   const [addToPlaylistTrack, setAddToPlaylistTrack] = useState<Track | null>(null);
   const [playlistSearch, setPlaylistSearch] = useState('');
 
-  const uploaders = useMemo(
-    () => {
-      const map = new Map<string, string>();
-      initialTracks.forEach((t) => {
-        if (t.uploaderId && t.uploaderName) {
-          map.set(t.uploaderId, t.uploaderName);
-        }
-      });
-      return Array.from(map.entries()).map(([value, label]) => ({ value, label }));
-    },
-    [initialTracks],
-  );
+  const uploaders = useMemo(() => {
+    const map = new Map<string, string>();
+    initialTracks.forEach((t) => {
+      if (t.uploaderId && t.uploaderName) {
+        map.set(t.uploaderId, t.uploaderName);
+      }
+    });
+    return Array.from(map.entries()).map(([value, label]) => ({ value, label }));
+  }, [initialTracks]);
 
   const filteredTracks = useMemo(() => {
     let list = [...initialTracks];
@@ -159,9 +156,7 @@ export default function GramophonePageClient({ initialTracks }: GramophonePageCl
         setUrl('');
         notifications.show({
           title: 'Succès',
-          message: data.cached
-            ? 'Cette musique était déjà téléchargée'
-            : 'Musique téléchargée avec succès',
+          message: data.cached ? 'Cette musique était déjà téléchargée' : 'Musique téléchargée avec succès',
           color: 'green',
         });
         router.refresh();
@@ -269,9 +264,9 @@ export default function GramophonePageClient({ initialTracks }: GramophonePageCl
             <Group gap="sm">
               <IconMusic size={40} stroke={1.5} />
               <div>
-                <Title order={1}>Gramophone</Title>
+                <Title order={1}>Bibliothèque</Title>
                 <Text c="dimmed" size="sm" tt="uppercase" fw={300} lts={2}>
-                  Convertisseur YouTube → MP3 pour serveur RP
+                  Ajoute des musiques et organise-les en playlists
                 </Text>
               </div>
             </Group>
@@ -281,9 +276,9 @@ export default function GramophonePageClient({ initialTracks }: GramophonePageCl
             variant="filled"
             leftSection={<IconPlaylist size={16} />}
             component={Link}
-            href={routes.gramophone.playlists}
+            href={routes.playlists.index}
           >
-            Gérer les playlists
+            Playlists
           </Button>
         </Group>
 
@@ -327,7 +322,7 @@ export default function GramophonePageClient({ initialTracks }: GramophonePageCl
 
         <Stack gap="md">
           <Group justify="space-between" align="flex-end">
-            <Title order={2}>Bibliothèque ({filteredTracks.length})</Title>
+            <Title order={2}>Musiques ({filteredTracks.length})</Title>
           </Group>
 
           <Card withBorder radius="md" p="sm">
@@ -339,7 +334,7 @@ export default function GramophonePageClient({ initialTracks }: GramophonePageCl
                 size="sm"
               />
               <Select
-                placeholder="Filtrer par uploader"
+                placeholder="Uploader"
                 data={uploaders}
                 value={uploaderFilter}
                 onChange={setUploaderFilter}
@@ -347,7 +342,7 @@ export default function GramophonePageClient({ initialTracks }: GramophonePageCl
                 size="sm"
               />
               <Select
-                placeholder="Trier par"
+                placeholder="Tri"
                 value={sortBy}
                 onChange={(value) => setSortBy((value as any) ?? 'date_desc')}
                 data={[
@@ -362,14 +357,26 @@ export default function GramophonePageClient({ initialTracks }: GramophonePageCl
           </Card>
 
           {filteredTracks.length === 0 ? (
-            <Text c="dimmed" ta="center" py="xl">
-              Aucune musique encore téléchargée.
-            </Text>
+            <Stack gap="xs" align="center" py="xl">
+              <Text c="dimmed" ta="center">
+                Ta bibliothèque est vide pour le moment.
+              </Text>
+              <Text c="dimmed" size="sm" ta="center">
+                Colle une URL YouTube ci-dessus, ou crée une playlist pour organiser tes musiques.
+              </Text>
+              <Group gap="xs">
+                <Button
+                  component={Link}
+                  href={routes.playlists.index}
+                  variant="light"
+                  leftSection={<IconPlaylist size={16} />}
+                >
+                  Voir les playlists
+                </Button>
+              </Group>
+            </Stack>
           ) : (
-            <SimpleGrid
-              cols={{ base: 1, sm: 2, lg: 3 }}
-              spacing="md"
-            >
+            <SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }} spacing="md">
               {filteredTracks.map((track) => (
                 <Card key={track.id} withBorder p="md" radius="md">
                   <Group gap="md" align="flex-start" wrap="nowrap">
@@ -386,9 +393,7 @@ export default function GramophonePageClient({ initialTracks }: GramophonePageCl
                       />
                     )}
                     <Stack gap="xs" style={{ flex: 1, minWidth: 0 }}>
-                      <Text fw={500}>
-                        {track.title}
-                      </Text>
+                      <Text fw={500}>{track.title}</Text>
                       <Text size="sm" c="dimmed">
                         {track.artist && <>{track.artist} · </>}
                         {formatDuration(track.duration)}
@@ -413,13 +418,7 @@ export default function GramophonePageClient({ initialTracks }: GramophonePageCl
                           size="xs"
                           variant={copied === track.id ? 'light' : 'default'}
                           color={copied === track.id ? 'green' : undefined}
-                          leftSection={
-                            copied === track.id ? (
-                              <IconCheck size={14} />
-                            ) : (
-                              <IconCopy size={14} />
-                            )
-                          }
+                          leftSection={copied === track.id ? <IconCheck size={14} /> : <IconCopy size={14} />}
                           onClick={() => copyLink(track.s3Url, track.id)}
                         >
                           {copied === track.id ? 'Copié' : 'Copier'}
@@ -437,27 +436,18 @@ export default function GramophonePageClient({ initialTracks }: GramophonePageCl
                           </Menu.Target>
                           <Menu.Dropdown>
                             <Menu.Label>Actions</Menu.Label>
-                            <Menu.Item
-                              onClick={() => openAddToPlaylistMenu(track)}
-                            >
+                            <Menu.Item onClick={() => openAddToPlaylistMenu(track)}>
                               Ajouter à une playlist
                             </Menu.Item>
                             {track.canDelete && (
-                              <Menu.Item
-                                color="red"
-                                onClick={() => handleDelete(track)}
-                              >
+                              <Menu.Item color="red" onClick={() => handleDelete(track)}>
                                 Supprimer
                               </Menu.Item>
                             )}
                           </Menu.Dropdown>
                         </Menu>
                       </Group>
-                      <audio
-                        controls
-                        src={track.s3Url}
-                        style={{ width: '100%', marginTop: '0.5rem' }}
-                      />
+                      <audio controls src={track.s3Url} style={{ width: '100%', marginTop: '0.5rem' }} />
                     </Stack>
                   </Group>
                 </Card>
@@ -472,7 +462,7 @@ export default function GramophonePageClient({ initialTracks }: GramophonePageCl
             setAddToPlaylistTrack(null);
             setPlaylistSearch('');
           }}
-          title={addToPlaylistTrack ? `Ajouter "${addToPlaylistTrack.title}" à une playlist` : ''}
+          title={addToPlaylistTrack ? `Ajouter \"${addToPlaylistTrack.title}\" à une playlist` : ''}
           size="lg"
         >
           <Stack gap="sm">
@@ -493,18 +483,13 @@ export default function GramophonePageClient({ initialTracks }: GramophonePageCl
               <ScrollArea.Autosize mah={300}>
                 <Stack gap="xs">
                   {filteredPlaylists.map((pl) => (
-                    <Group
-                      key={pl.id}
-                      justify="space-between"
-                      align="center"
-                    >
+                    <Group key={pl.id} justify="space-between" align="center">
                       <div>
                         <Text size="sm" fw={500}>
                           {pl.name}
                         </Text>
                         <Text size="xs" c="dimmed">
-                          {pl.tracksCount} piste{pl.tracksCount > 1 ? 's' : ''} · Propriétaire{' '}
-                          {pl.ownerName ?? 'Inconnu'}
+                          {pl.tracksCount} piste{pl.tracksCount > 1 ? 's' : ''} · Propriétaire {pl.ownerName ?? 'Inconnu'}
                         </Text>
                       </div>
                       <Button
@@ -524,3 +509,4 @@ export default function GramophonePageClient({ initialTracks }: GramophonePageCl
     </Container>
   );
 }
+

@@ -37,7 +37,8 @@ export async function proxy(req: NextRequest) {
     pathname.startsWith(routes.auth.index) ||
     pathname.startsWith(routes.settings.index) ||
     pathname.startsWith(routes.admin.index) ||
-    pathname.startsWith(routes.gramophone.index);
+    pathname.startsWith(routes.library.index) ||
+    pathname.startsWith(routes.playlists.index);
 
   if (!shouldProxy) {
     return NextResponse.next();
@@ -56,7 +57,10 @@ export async function proxy(req: NextRequest) {
     if (pathname === routes.admin.users) {
       middlewares.push(hasAdminRoleMiddleware);
     }
-  } else if (pathname.startsWith(routes.gramophone.index)) {
+  } else if (pathname.startsWith(routes.library.index)) {
+    middlewares.push(hasToBeLoggedInMiddleware);
+    middlewares.push(hasGramophoneAccessMiddleware);
+  } else if (pathname.startsWith(routes.playlists.index)) {
     middlewares.push(hasToBeLoggedInMiddleware);
     middlewares.push(hasGramophoneAccessMiddleware);
   } else if (pathname.startsWith(routes.settings.index)) {

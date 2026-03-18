@@ -9,9 +9,11 @@ export const routes = {
   settings: {
     index: '/settings',
   },
-  gramophone: {
-    index: '/gramophone',
-    playlists: '/gramophone/playlists',
+  library: {
+    index: '/libraries',
+  },
+  playlists: {
+    index: '/playlists',
   },
   auth: {
     index: '/auth',

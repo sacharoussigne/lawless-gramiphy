@@ -14,7 +14,7 @@ export default async function LoginPage() {
   if (session) {
     const role = session.user.role ?? null;
     const canAccessGramophone = checkRolePermission(role, 'gramophone', 'access');
-    redirect(canAccessGramophone ? routes.gramophone.index : routes.settings.index);
+    redirect(canAccessGramophone ? routes.library.index : routes.settings.index);
   }
   return <Signup />;
 }

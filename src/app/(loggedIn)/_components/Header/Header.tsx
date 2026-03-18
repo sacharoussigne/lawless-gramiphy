@@ -16,7 +16,7 @@ import { AuthSession } from '@/types/session';
 import { routes } from '@/types/routes';
 import Link from 'next/link';
 import Image from 'next/image';
-import { IconLogout, IconSettings } from '@tabler/icons-react';
+import { IconLogout, IconSettings, IconMusic, IconPlaylist } from '@tabler/icons-react';
 import { usePermissions } from '@/app/_contexts/PermissionsContext';
 import { hasRole, checkRolePermission } from '@/lib/auth/permissions';
 import { Role } from '@/types/enum/roles';
@@ -60,7 +60,7 @@ export default function Header({
           <Link
             href={
               checkRolePermission(userRole, 'gramophone', 'access')
-                ? routes.gramophone.index
+                ? routes.library.index
                 : routes.settings.index
             }
             className={classes.logoLink}
@@ -81,12 +81,22 @@ export default function Header({
             {session ? (
               <>
                 {!isAdminSpace && checkRolePermission(userRole, 'gramophone', 'access') && (
-                  <Link
-                    href={routes.gramophone.index}
-                    className={`${classes.link} ${isRouteActive(routes.gramophone.index) ? classes.linkActive : ''}`}
-                  >
-                    Gramophone
-                  </Link>
+                  <Group gap={6}>
+                    <Link
+                      href={routes.library.index}
+                      className={`${classes.link} ${isRouteActive(routes.library.index) ? classes.linkActive : ''}`}
+                    >
+                      <IconMusic size={16} stroke={1.6} />
+                      Bibliothèque
+                    </Link>
+                    <Link
+                      href={routes.playlists.index}
+                      className={`${classes.link} ${isRouteActive(routes.playlists.index) ? classes.linkActive : ''}`}
+                    >
+                      <IconPlaylist size={16} stroke={1.6} />
+                      Playlists
+                    </Link>
+                  </Group>
                 )}
                 <Menu
                   width={260}

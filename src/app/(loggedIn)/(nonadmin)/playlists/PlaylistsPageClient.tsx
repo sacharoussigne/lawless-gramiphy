@@ -24,7 +24,6 @@ import Link from 'next/link';
 import { routes } from '@/types/routes';
 
 type PlaylistScope = 'all' | 'mine';
-
 type PlaylistSort = 'date_desc' | 'date_asc' | 'name' | 'tracks';
 
 type PlaylistSummary = {
@@ -152,7 +151,7 @@ export default function PlaylistsPageClient({ initialPlaylists }: PlaylistsPageC
               <div>
                 <Title order={1}>Playlists</Title>
                 <Text c="dimmed" size="sm">
-                  Organisez les musiques du Gramophone en listes.
+                  Organisez les musiques de la bibliothèque en listes.
                 </Text>
               </div>
             </Group>
@@ -163,9 +162,9 @@ export default function PlaylistsPageClient({ initialPlaylists }: PlaylistsPageC
               variant="subtle"
               leftSection={<IconPlayerPlay size={14} />}
               component={Link}
-              href={routes.gramophone.index}
+              href={routes.library.index}
             >
-              Revenir au Gramophone
+              Revenir à la bibliothèque
             </Button>
             <Button size="sm" onClick={() => setCreateModalOpen(true)}>
               Nouvelle playlist
@@ -177,8 +176,7 @@ export default function PlaylistsPageClient({ initialPlaylists }: PlaylistsPageC
           <Stack gap="sm">
             <Group justify="space-between" align="center">
               <Text c="dimmed" size="sm">
-                {filteredPlaylists.length} playlist
-                {filteredPlaylists.length > 1 ? 's' : ''}
+                {filteredPlaylists.length} playlist{filteredPlaylists.length > 1 ? 's' : ''}
               </Text>
             </Group>
             <Group gap="sm" grow>
@@ -219,9 +217,17 @@ export default function PlaylistsPageClient({ initialPlaylists }: PlaylistsPageC
         )}
 
         {filteredPlaylists.length === 0 ? (
-          <Text c="dimmed" ta="center" py="xl">
-            Aucune playlist créée pour le moment.
-          </Text>
+          <Stack gap="xs" align="center" py="xl">
+            <Text c="dimmed" ta="center">
+              Aucune playlist pour le moment.
+            </Text>
+            <Text c="dimmed" size="sm" ta="center">
+              Crée ta première playlist pour regrouper des musiques rapidement.
+            </Text>
+            <Button onClick={() => setCreateModalOpen(true)} variant="light">
+              Créer une playlist
+            </Button>
+          </Stack>
         ) : (
           <Stack gap="md">
             {filteredPlaylists.map((pl) => (
@@ -231,7 +237,7 @@ export default function PlaylistsPageClient({ initialPlaylists }: PlaylistsPageC
                 radius="md"
                 p="md"
                 component={Link}
-                href={`${routes.gramophone.playlists}/${pl.id}`}
+                href={`${routes.playlists.index}/${pl.id}`}
                 style={{ textDecoration: 'none' }}
               >
                 <Group justify="space-between" align="flex-start">
@@ -243,8 +249,7 @@ export default function PlaylistsPageClient({ initialPlaylists }: PlaylistsPageC
                       </Text>
                     )}
                     <Text size="xs" c="dimmed">
-                      {pl.tracksCount} piste{pl.tracksCount > 1 ? 's' : ''} · Créée par{' '}
-                      {pl.ownerName ?? 'Inconnu'}
+                      {pl.tracksCount} piste{pl.tracksCount > 1 ? 's' : ''} · Créée par {pl.ownerName ?? 'Inconnu'}
                     </Text>
                   </Stack>
                   {pl.canEdit && (
@@ -268,11 +273,7 @@ export default function PlaylistsPageClient({ initialPlaylists }: PlaylistsPageC
           </Stack>
         )}
 
-        <Modal
-          opened={createModalOpen}
-          onClose={() => setCreateModalOpen(false)}
-          title="Nouvelle playlist"
-        >
+        <Modal opened={createModalOpen} onClose={() => setCreateModalOpen(false)} title="Nouvelle playlist">
           <Stack gap="sm">
             <TextInput
               label="Nom"
