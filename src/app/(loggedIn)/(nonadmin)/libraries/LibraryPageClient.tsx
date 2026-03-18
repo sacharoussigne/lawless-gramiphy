@@ -9,25 +9,21 @@ import {
   Button,
   Text,
   Group,
-  Anchor,
-  Image,
   Alert,
   Title,
   Select,
   Group as MantineGroup,
-  Menu,
-  SimpleGrid,
   Modal,
   ScrollArea,
 } from '@mantine/core';
 import {
   IconMusic,
-  IconCopy,
-  IconCheck,
   IconAlertCircle,
   IconPlaylist,
-  IconDotsVertical,
+  IconPlus,
 } from '@tabler/icons-react';
+import TrackRow from '../../_components/Tracks/TrackRow';
+import useSingleAudioPlayer from '../../_components/Tracks/useSingleAudioPlayer';
 import { downloadTrack, deleteTrack } from '@/app/_actions/tracks';
 import { addTrackToPlaylist, getPlaylists } from '@/app/_actions/playlists';
 import { handleAction } from '@/lib/action';
@@ -74,9 +70,11 @@ function formatDuration(s: number | null) {
 
 export default function LibraryPageClient({ initialTracks }: LibraryPageClientProps) {
   const router = useRouter();
+  const audioPlayer = useSingleAudioPlayer();
   const [url, setUrl] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [addModalOpened, setAddModalOpened] = useState(false);
   const [copied, setCopied] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [search, setSearch] = useState('');
@@ -153,6 +151,7 @@ export default function LibraryPageClient({ initialTracks }: LibraryPageClientPr
 
       if (data) {
         setUrl('');
+        setAddModalOpened(false);
         notifications.show({
           title: 'Succès',
           message: data.cached ? 'Cette musique était déjà téléchargée' : 'Musique téléchargée avec succès',
@@ -281,41 +280,25 @@ export default function LibraryPageClient({ initialTracks }: LibraryPageClientPr
         </Group>
 
         <Card withBorder p="lg" radius="md" shadow="sm">
-          <Stack gap="md">
-            <TextInput
-              label="URL YouTube"
-              placeholder="https://www.youtube.com/watch?v=..."
-              value={url}
-              onChange={(e) => setUrl(e.currentTarget.value)}
-              onKeyDown={(e) => e.key === 'Enter' && !loading && url.trim() && handleDownload()}
-              disabled={loading}
-              rightSectionWidth={130}
-              rightSection={
-                <Button
-                  onClick={handleDownload}
-                  disabled={loading || !url.trim()}
-                  loading={loading}
-                  fullWidth
-                  size="sm"
-                >
-                  Télécharger
-                </Button>
-              }
-            />
-            <Text size="xs" c="dimmed">
-              Colle une URL YouTube pour convertir la vidéo en MP3 et l&apos;ajouter à ta bibliothèque.
-            </Text>
-            {error && (
-              <Alert icon={<IconAlertCircle size={16} />} title="Erreur" color="red">
-                {error}
-              </Alert>
-            )}
-            {loading && (
-              <Text size="sm" c="dimmed">
-                Téléchargement en cours… cela peut prendre 30–60 secondes.
+          <Group justify="space-between" align="center" wrap="nowrap">
+            <Stack gap={2} style={{ minWidth: 0 }}>
+              <Text fw={600}>Ajouter une musique</Text>
+              <Text size="xs" c="dimmed" lineClamp={2}>
+                Colle une URL YouTube pour convertir la vidéo en MP3 et l&apos;ajouter à ta bibliothèque.
               </Text>
-            )}
-          </Stack>
+            </Stack>
+            <Button
+              size="sm"
+              onClick={() => {
+                setAddModalOpened(true);
+                setError(null);
+              }}
+              leftSection={<IconPlus size={16} />}
+              disabled={loading}
+            >
+              Ajouter
+            </Button>
+          </Group>
         </Card>
 
         <Stack gap="md">
@@ -374,85 +357,87 @@ export default function LibraryPageClient({ initialTracks }: LibraryPageClientPr
               </Group>
             </Stack>
           ) : (
-            <SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }} spacing="md">
+            <Stack gap="sm">
               {filteredTracks.map((track) => (
-                <Card key={track.id} withBorder p="md" radius="md">
-                  <Group gap="md" align="flex-start" wrap="nowrap">
-                    {track.thumbnail && (
-                      <Image
-                        src={track.thumbnail}
-                        alt={track.title}
-                        w={72}
-                        h={72}
-                        fit="cover"
-                        radius="sm"
-                        style={{ flexShrink: 0 }}
-                        fallbackSrc="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='72' height='72'%3E%3Crect fill='%23ddd' width='72' height='72'/%3E%3C/svg%3E"
-                      />
-                    )}
-                    <Stack gap="xs" style={{ flex: 1, minWidth: 0 }}>
-                      <Text fw={500}>{track.title}</Text>
-                      <Text size="sm" c="dimmed">
-                        {track.artist && <>{track.artist} · </>}
-                        {formatDuration(track.duration)}
-                      </Text>
-                      <Text size="xs" c="dimmed">
-                        Ajoutée par {track.uploaderName ?? 'Inconnu'}
-                      </Text>
-                      <Group gap="xs" wrap="nowrap" align="center">
-                        <Anchor
-                          href={track.s3Url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          size="xs"
-                          style={{ flex: 1, minWidth: 0 }}
-                          ff="monospace"
-                          c="dimmed"
-                          truncate
-                        >
-                          {track.s3Url}
-                        </Anchor>
-                        <Button
-                          size="xs"
-                          variant={copied === track.id ? 'light' : 'default'}
-                          color={copied === track.id ? 'green' : undefined}
-                          leftSection={copied === track.id ? <IconCheck size={14} /> : <IconCopy size={14} />}
-                          onClick={() => copyLink(track.s3Url, track.id)}
-                        >
-                          {copied === track.id ? 'Copié' : 'Copier'}
-                        </Button>
-                        <Menu withinPortal>
-                          <Menu.Target>
-                            <Button
-                              size="xs"
-                              variant="subtle"
-                              px="xs"
-                              loading={addingToPlaylistId === track.id}
-                            >
-                              <IconDotsVertical size={16} />
-                            </Button>
-                          </Menu.Target>
-                          <Menu.Dropdown>
-                            <Menu.Label>Actions</Menu.Label>
-                            <Menu.Item onClick={() => openAddToPlaylistMenu(track)}>
-                              Ajouter à une playlist
-                            </Menu.Item>
-                            {track.canDelete && (
-                              <Menu.Item color="red" onClick={() => handleDelete(track)}>
-                                Supprimer
-                              </Menu.Item>
-                            )}
-                          </Menu.Dropdown>
-                        </Menu>
-                      </Group>
-                      <audio controls src={track.s3Url} style={{ width: '100%', marginTop: '0.5rem' }} />
-                    </Stack>
-                  </Group>
-                </Card>
+                <TrackRow
+                  key={track.id}
+                  track={track}
+                  trackHref={`/tracks/${track.id}`}
+                  currentTrackId={audioPlayer.currentTrackId}
+                  isPlaying={audioPlayer.isPlaying}
+                  progressRatio={audioPlayer.progressRatio}
+                  onTogglePlay={(args) => audioPlayer.togglePlay(args)}
+                  onCopy={copyLink}
+                  copiedTrackId={copied}
+                  onOpenAddToPlaylistMenu={(t) => void openAddToPlaylistMenu(t as any)}
+                  onDeleteTrack={(t) => void handleDelete(t as any)}
+                  actionsLoading={addingToPlaylistId === track.id}
+                  deleting={deletingId === track.id}
+                />
               ))}
-            </SimpleGrid>
+            </Stack>
           )}
         </Stack>
+
+        <Modal
+          opened={addModalOpened}
+          onClose={() => {
+            setAddModalOpened(false);
+            setUrl('');
+            setError(null);
+          }}
+          title="Ajouter à la bibliothèque"
+          size="sm"
+        >
+          <Stack gap="sm">
+            <TextInput
+              label="URL YouTube"
+              placeholder="https://www.youtube.com/watch?v=..."
+              value={url}
+              onChange={(e) => setUrl(e.currentTarget.value)}
+              onKeyDown={(e) => e.key === 'Enter' && !loading && url.trim() && handleDownload()}
+              disabled={loading}
+              autoFocus
+            />
+
+            {loading ? (
+              <Text size="sm" c="dimmed">
+                Conversion en cours… cela peut prendre 30–60 secondes.
+              </Text>
+            ) : (
+              <Text size="xs" c="dimmed">
+                Le téléchargement peut prendre 30–60 secondes.
+              </Text>
+            )}
+
+            {error && (
+              <Alert icon={<IconAlertCircle size={16} />} title="Erreur" color="red">
+                {error}
+              </Alert>
+            )}
+
+            <Group justify="flex-end" mt="md">
+              <Button
+                variant="default"
+                onClick={() => {
+                  setAddModalOpened(false);
+                  setUrl('');
+                  setError(null);
+                }}
+                disabled={loading}
+              >
+                Annuler
+              </Button>
+              <Button
+                onClick={handleDownload}
+                disabled={loading || !url.trim()}
+                loading={loading}
+              >
+                Ajouter
+              </Button>
+            </Group>
+          </Stack>
+        </Modal>
 
         <Modal
           opened={!!addToPlaylistTrack}

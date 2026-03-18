@@ -134,6 +134,77 @@ export async function getTracks(): Promise<ServerActionResponse<Track[]>> {
   }
 }
 
+export async function getTrackById(id: string): Promise<ServerActionResponse<Track>> {
+  try {
+    const trackId = id?.trim();
+    if (!trackId) {
+      return {
+        status: 400,
+        error: 'ID de track manquant',
+      };
+    }
+
+    const session = await getAuthSession();
+    if (!session) {
+      return {
+        status: 401,
+        error: 'Non autorisé',
+      };
+    }
+
+    const role = session.user.role ?? null;
+
+    const hasGramophoneAccess = checkRolePermission(role, 'gramophone', 'access');
+    if (!hasGramophoneAccess) {
+      return {
+        status: 403,
+        error: 'Accès refusé',
+      };
+    }
+
+    const prismaTrack = await prisma.track.findUnique({
+      where: { id: trackId },
+      select: {
+        id: true,
+        title: true,
+        artist: true,
+        youtubeUrl: true,
+        s3Url: true,
+        duration: true,
+        thumbnail: true,
+        uploaderId: true,
+        uploaderName: true,
+        createdAt: true,
+      },
+    });
+
+    if (!prismaTrack) {
+      return {
+        status: 404,
+        error: 'Track introuvable',
+      };
+    }
+
+    const canDelete =
+      (!!prismaTrack.uploaderId && prismaTrack.uploaderId === session.user.id) ||
+      checkRolePermission(role, 'gramophone', 'manage');
+
+    return {
+      status: 200,
+      data: {
+        ...prismaTrack,
+        canDelete,
+      },
+    };
+  } catch (error) {
+    const parsed = actionErrorParser(error, 'Erreur lors de la récupération de la track');
+    return {
+      status: parsed.status as 400 | 401 | 403 | 404 | 422 | 500,
+      error: typeof parsed.error === 'string' ? parsed.error : 'Erreur lors de la récupération de la track',
+    };
+  }
+}
+
 export async function downloadTrack(url: string): Promise<ServerActionResponse<{ track: Track; cached: boolean }>> {
   try {
     const session = await getAuthSession();

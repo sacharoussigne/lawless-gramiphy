@@ -29,7 +29,7 @@ const theme = createTheme({
     ],
   },
   primaryColor: 'green',
-  primaryShade: 6,
+  primaryShade: { light: 5, dark: 6 },
   defaultRadius: 'sm',
   spacing: {
     xs: '0.5rem',
@@ -67,7 +67,7 @@ const theme = createTheme({
         header: {
           borderBottom: '1px solid var(--mantine-color-dark-7)',
           backgroundColor: 'rgba(18, 20, 23, 0.85)',
-          backdropFilter: 'blur(10px)',
+          backdropFilter: 'blur(14px)',
         },
         navbar: {
           borderRight: '1px solid var(--mantine-color-dark-7)',
@@ -86,7 +86,24 @@ const theme = createTheme({
           borderRadius: '10px',
           fontWeight: 700,
           color: 'var(--mantine-color-dark-0)',
-          backgroundColor: 'transparent',
+          paddingInline: DEFAULT_THEME.spacing.sm,
+          paddingBlock: 6,
+          transition: 'background-color 160ms ease, transform 160ms ease, box-shadow 160ms ease',
+
+          '&[data-active]': {
+            backgroundColor: 'rgba(30, 215, 96, 0.45) !important',
+            boxShadow: 'inset 3px 0 0 rgba(30, 215, 96, 0.85)',
+            color: 'var(--mantine-color-dark-0) !important',
+          },
+
+          '&[data-hovered]': {
+            backgroundColor: 'rgba(30, 215, 96, 0.18) !important',
+          },
+
+          '&:focus-visible': {
+            outline: '2px solid rgba(30, 215, 96, 0.85)',
+            outlineOffset: 2,
+          },
         },
         label: {
           color: 'var(--mantine-color-dark-0)',

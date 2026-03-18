@@ -8,16 +8,11 @@ import {
   Stack,
   Text,
   Title,
-  SimpleGrid,
   TextInput,
-  Image,
 } from '@mantine/core';
 import {
   IconAlertCircle,
   IconMusic,
-  IconTrash,
-  IconCopy,
-  IconCheck,
   IconPlayerPlay,
   IconPlaylist,
 } from '@tabler/icons-react';
@@ -31,6 +26,8 @@ import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import { routes } from '@/types/routes';
 import CollaboratorsModal from './_components/CollaboratorsModal';
+import TrackRow from '../../../_components/Tracks/TrackRow';
+import useSingleAudioPlayer from '../../../_components/Tracks/useSingleAudioPlayer';
 
 type PlaylistTrack = {
   id: string;
@@ -67,15 +64,9 @@ interface PlaylistDetailsPageClientProps {
   playlist: PlaylistWithTracks;
 }
 
-function formatDuration(s: number | null) {
-  if (!s) return '—';
-  const m = Math.floor(s / 60);
-  const sec = s % 60;
-  return `${m}:${sec.toString().padStart(2, '0')}`;
-}
-
 export default function PlaylistDetailsPageClient({ playlist }: PlaylistDetailsPageClientProps) {
   const router = useRouter();
+  const audioPlayer = useSingleAudioPlayer();
   const [error, setError] = useState<string | null>(null);
   const [removingId, setRemovingId] = useState<string | null>(null);
   const [search, setSearch] = useState('');
@@ -93,9 +84,9 @@ export default function PlaylistDetailsPageClient({ playlist }: PlaylistDetailsP
     });
   }, [playlist.tracks, search]);
 
-  const handleCopy = (track: PlaylistTrack) => {
-    navigator.clipboard.writeText(track.s3Url);
-    setCopiedId(track.id);
+  const handleCopy = (s3Url: string, id: string) => {
+    navigator.clipboard.writeText(s3Url);
+    setCopiedId(id);
     setTimeout(() => setCopiedId(null), 2000);
     notifications.show({
       title: 'Copié',
@@ -239,70 +230,25 @@ export default function PlaylistDetailsPageClient({ playlist }: PlaylistDetailsP
               Aucune musique ne correspond à la recherche.
             </Text>
           ) : (
-            <SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }} spacing="md">
+            <Stack gap="sm">
               {filteredTracks.map((track) => (
-                <Card key={track.id} withBorder radius="md" p="md">
-                  <Group gap="md" align="flex-start" wrap="nowrap">
-                    {track.thumbnail && (
-                      <Image
-                        src={track.thumbnail}
-                        alt={track.title}
-                        w={72}
-                        h={72}
-                        fit="cover"
-                        radius="sm"
-                        style={{ flexShrink: 0 }}
-                        fallbackSrc="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='72' height='72'%3E%3Crect fill='%23ddd' width='72' height='72'/%3E%3C/svg%3E"
-                      />
-                    )}
-                    <Stack gap="xs" style={{ flex: 1, minWidth: 0 }}>
-                      <Text fw={500}>{track.title}</Text>
-                      <Text size="sm" c="dimmed">
-                        {track.artist && <>{track.artist} · </>}
-                        {formatDuration(track.duration)}
-                      </Text>
-                      <Text size="xs" c="dimmed">
-                        Ajoutée par {track.uploaderName ?? 'Inconnu'}
-                      </Text>
-                      <Group gap="xs" wrap="nowrap" align="center">
-                        <Text
-                          size="xs"
-                          c="dimmed"
-                          ff="monospace"
-                          style={{ flex: 1, minWidth: 0 }}
-                          lineClamp={1}
-                          title={track.s3Url}
-                        >
-                          {track.s3Url}
-                        </Text>
-                        <Button
-                          size="xs"
-                          variant={copiedId === track.id ? 'light' : 'default'}
-                          color={copiedId === track.id ? 'green' : undefined}
-                          leftSection={copiedId === track.id ? <IconCheck size={14} /> : <IconCopy size={14} />}
-                          onClick={() => handleCopy(track)}
-                        >
-                          {copiedId === track.id ? 'Copié' : 'Copier'}
-                        </Button>
-                        {playlist.canEdit && (
-                          <Button
-                            size="xs"
-                            color="red"
-                            variant="light"
-                            leftSection={<IconTrash size={14} />}
-                            loading={removingId === track.id}
-                            onClick={() => handleRemove(track)}
-                          >
-                            Retirer
-                          </Button>
-                        )}
-                      </Group>
-                      <audio controls src={track.s3Url} style={{ width: '100%', marginTop: '0.5rem' }} />
-                    </Stack>
-                  </Group>
-                </Card>
+                <TrackRow
+                  key={track.id}
+                  track={{ ...track, canDelete: playlist.canEdit }}
+                  trackHref={`/tracks/${track.id}`}
+                  currentTrackId={audioPlayer.currentTrackId}
+                  isPlaying={audioPlayer.isPlaying}
+                  progressRatio={audioPlayer.progressRatio}
+                  onTogglePlay={(args) => audioPlayer.togglePlay(args)}
+                  onCopy={handleCopy}
+                  copiedTrackId={copiedId}
+                  onDeleteTrack={(t) => void handleRemove(t as any)}
+                  deleting={removingId === track.id}
+                  showAddToPlaylist={false}
+                  removeActionLabel="Retirer"
+                />
               ))}
-            </SimpleGrid>
+            </Stack>
           )}
         </Stack>
     </Stack>

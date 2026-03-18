@@ -42,12 +42,18 @@ export default function SidebarNav({ onNavigate }: SidebarNavProps) {
 
   return (
     <ScrollArea type="never" style={{ height: '100%' }}>
-      <Stack gap="xs" p="md">
-        <Text size="xs" c="dimmed" fw={600} tt="uppercase" style={{ letterSpacing: 0.6 }}>
+      <Stack gap="sm" p="md">
+        <Text
+          size="xs"
+          c="green.4"
+          fw={600}
+          tt="uppercase"
+          style={{ letterSpacing: 0.6 }}
+        >
           Menu
         </Text>
 
-        <Stack gap={2}>
+        <Stack gap={4}>
           {items.map(({ href, label, icon: Icon }) => (
             <NavLink
               key={href}
@@ -64,7 +70,7 @@ export default function SidebarNav({ onNavigate }: SidebarNavProps) {
         {showAdmin && (
           <>
             <Divider my="sm" />
-            <Text size="xs" c="dimmed" fw={600} tt="uppercase" style={{ letterSpacing: 0.6 }}>
+            <Text size="xs" c="green.4" fw={600} tt="uppercase" style={{ letterSpacing: 0.6 }}>
               Admin
             </Text>
             <NavLink

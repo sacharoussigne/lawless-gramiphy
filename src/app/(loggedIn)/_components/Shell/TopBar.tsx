@@ -36,7 +36,7 @@ export default function TopBar({ session, opened, toggle }: TopBarProps) {
 
   return (
     <Group h="100%" px="md" justify="space-between" wrap="nowrap">
-      <Group gap="sm" wrap="nowrap">
+      <Group gap="xs" wrap="nowrap">
         <ActionIcon
           variant="subtle"
           size="lg"
@@ -46,15 +46,8 @@ export default function TopBar({ session, opened, toggle }: TopBarProps) {
           <IconMenu2 size={20} stroke={1.8} />
         </ActionIcon>
 
-        <Link
-          href={routes.library.index}
-          style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: 10,
-            textDecoration: 'none',
-          }}
-        >
+        <Link href={routes.library.index} style={{ textDecoration: 'none' }}>
+          <Group gap={8} wrap="nowrap">
           <Image
             src="/logo_gramiphy.png"
             alt="Gramiphy"
@@ -65,6 +58,7 @@ export default function TopBar({ session, opened, toggle }: TopBarProps) {
           <Text fw={700} size="sm">
             Gramiphy
           </Text>
+          </Group>
         </Link>
       </Group>
 
