@@ -8,9 +8,9 @@ export enum Role {
 export const rolesAsString = (role: Role): string => {
     switch (role) {
         case Role.VISITOR:
-            return "Visiteur";
-        case Role.USER:
             return "Utilisateur";
+        case Role.USER:
+            return "Visiteur";
         case Role.DJ:
             return "DJ";
         case Role.ADMIN:

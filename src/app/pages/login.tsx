@@ -4,11 +4,11 @@ import {
   Anchor,
   Button,
   Checkbox,
-  Container,
   Divider,
   Group,
   Paper,
   PasswordInput,
+  Stack,
   Text,
   TextInput,
   Title,
@@ -61,18 +61,20 @@ export default function Login() {
   };
 
   return (
-    <Container size={420} my={40}>
-      <Title ta="center">Bon retour ! </Title>
-      <Text c="dimmed" size="sm" ta="center" mt={5}>
-        Vous n'avez pas encore de compte ?{' '}
-        <Link href={'/auth/signup'}>
-          <Anchor size="sm" component="button">
-            Créer un compte
-          </Anchor>
-        </Link>
-      </Text>
+    <Stack gap="lg">
+      <Stack gap={6} ta="center">
+        <Title order={1}>Bon retour !</Title>
+        <Text c="dimmed" size="sm">
+          Vous n'avez pas encore de compte ?{' '}
+          <Link href={'/auth/signup'}>
+            <Anchor size="sm" component="button">
+              Créer un compte
+            </Anchor>
+          </Link>
+        </Text>
+      </Stack>
 
-      <Paper withBorder shadow="md" p={30} mt={30} radius="md">
+      <Paper withBorder shadow="md" p={30} radius="md">
         <Group grow mb="md" mt="md">
           <DiscordButton radius="xl" onClick={signInWithDiscord}>
             Discord
@@ -122,6 +124,6 @@ export default function Login() {
           </Button>
         </form>
       </Paper>
-    </Container>
+    </Stack>
   );
 }

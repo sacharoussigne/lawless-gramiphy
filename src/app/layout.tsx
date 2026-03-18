@@ -8,7 +8,7 @@ import {
 import { Notifications } from '@mantine/notifications';
 import { ModalsProvider } from '@mantine/modals';
 
-import './globals.scss';
+import './globals.css';
 import '@mantine/core/styles.css';
 import '@mantine/notifications/styles.css';
 import 'mantine-datatable/styles.css';
@@ -56,7 +56,12 @@ export default async function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        <MantineProvider theme={theme}>
+        <MantineProvider
+          theme={theme}
+          defaultColorScheme="dark"
+          withStaticClasses
+          withGlobalClasses
+        >
           <ModalsProvider>
             <Notifications position={'top-right'} />
             {children}

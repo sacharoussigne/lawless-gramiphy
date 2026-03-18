@@ -12,7 +12,7 @@ export default async function Home() {
       const canAccessGramophone = checkRolePermission(role, 'gramophone', 'access');
 
       if (canAccessGramophone) {
-        redirect(routes.gramophone.index);
+        redirect(routes.library.index);
       }
 
       redirect(routes.settings.index);

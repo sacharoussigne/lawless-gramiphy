@@ -9,7 +9,7 @@ export async function hasToBeLoggedOutMiddleware(request: NextRequest, session: 
 
     return routes.redirect(
       request,
-      canAccessGramophone ? routes.gramophone.index : routes.settings.index,
+      canAccessGramophone ? routes.library.index : routes.settings.index,
     );
   }
 

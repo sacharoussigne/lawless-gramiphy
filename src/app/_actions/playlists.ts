@@ -97,6 +97,11 @@ export async function getPlaylists(): Promise<ServerActionResponse<PlaylistSumma
         tracks: {
           select: { id: true },
         },
+        collaborators: {
+          select: {
+            userId: true,
+          },
+        },
       },
     });
 
@@ -105,7 +110,7 @@ export async function getPlaylists(): Promise<ServerActionResponse<PlaylistSumma
         playlistOwnerId: pl.ownerId,
         userId,
         role,
-        collaboratorsUserIds: [], // collaborators are not needed to compute list-level permissions for now
+        collaboratorsUserIds: pl.collaborators.map((c) => c.userId),
       });
 
       return {
@@ -130,6 +135,90 @@ export async function getPlaylists(): Promise<ServerActionResponse<PlaylistSumma
         typeof parsed.error === 'string'
           ? parsed.error
           : 'Erreur lors de la récupération des playlists',
+    };
+  }
+}
+
+export async function getManageablePlaylistsForTrack(
+  trackId: string,
+): Promise<ServerActionResponse<PlaylistSummary[]>> {
+  try {
+    const session = await getAuthSession();
+    if (!session) {
+      return { status: 401, error: 'Non autorisé' };
+    }
+
+    const role = session.user.role ?? null;
+    const userId = session.user.id;
+
+    const hasGramophoneAccess = checkRolePermission(role, 'gramophone', 'access');
+    if (!hasGramophoneAccess) {
+      return { status: 403, error: 'Accès refusé' };
+    }
+
+    const playlists = await prisma.playlist.findMany({
+      orderBy: { createdAt: 'desc' },
+      include: {
+        owner: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+          },
+        },
+        tracks: {
+          select: {
+            id: true,
+            trackId: true,
+          },
+        },
+        collaborators: {
+          select: {
+            userId: true,
+          },
+        },
+      },
+    });
+
+    const summaries: PlaylistSummary[] = [];
+
+    for (const pl of playlists) {
+      const permissions = computePlaylistPermissions({
+        playlistOwnerId: pl.ownerId,
+        userId,
+        role,
+        collaboratorsUserIds: pl.collaborators.map((c) => c.userId),
+      });
+
+      const alreadyContainsTrack = pl.tracks.some((t) => t.trackId === trackId);
+
+      if (!permissions.canEdit || alreadyContainsTrack) continue;
+
+      summaries.push({
+        id: pl.id,
+        name: pl.name,
+        description: pl.description,
+        ownerId: pl.ownerId,
+        ownerName: pl.owner?.name ?? null,
+        tracksCount: pl.tracks.length,
+        createdAt: pl.createdAt,
+        updatedAt: pl.updatedAt,
+        canEdit: permissions.canEdit,
+      });
+    }
+
+    return { status: 200, data: summaries };
+  } catch (error) {
+    const parsed = actionErrorParser(
+      error,
+      'Erreur lors de la récupération des playlists disponibles pour cette musique',
+    );
+    return {
+      status: parsed.status as 400 | 401 | 403 | 404 | 422 | 500,
+      error:
+        typeof parsed.error === 'string'
+          ? parsed.error
+          : 'Erreur lors de la récupération des playlists disponibles pour cette musique',
     };
   }
 }
