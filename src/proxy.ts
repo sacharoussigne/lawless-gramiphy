@@ -1,6 +1,6 @@
-import { NextRequest } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { routes } from './types/routes';
-import { getAuthSession } from './lib/auth';
+import { auth } from './lib/auth';
 import { hasToBeLoggedOutMiddleware } from './middlewares/hasToBeLoggedOutMiddleware';
 import { hasToBeLoggedInMiddleware } from './middlewares/hasToBeLoggedInMiddleware';
 import { hasAdminRoleMiddleware } from './middlewares/hasAdminRoleMiddleware';
@@ -8,50 +8,66 @@ import { hasGramophoneAccessMiddleware } from './middlewares/hasGramophoneAccess
 import { hasSettingsAccessMiddleware } from './middlewares/hasSettingsAccessMiddleware';
 import { chain } from './middlewares/chain';
 
-export async function middleware(req: NextRequest) {
+async function getSessionFromRequest(req: NextRequest) {
+  try {
+    return await auth.api.getSession({
+      headers: req.headers,
+    });
+  } catch {
+    return null;
+  }
+}
+
+export async function proxy(req: NextRequest) {
   const pathname = req.nextUrl.pathname;
 
-  const session = await getAuthSession();
+  // Bypass proxy for Next internals, API routes, and static assets.
+  if (
+    pathname.startsWith('/_next') ||
+    pathname.startsWith('/api') ||
+    pathname === '/favicon.ico' ||
+    /\.[a-z0-9]+$/i.test(pathname)
+  ) {
+    return NextResponse.next();
+  }
+
+  // Route selection (matcher-like): only protect the routes we care about.
+  const shouldProxy =
+    pathname === '/' ||
+    pathname.startsWith(routes.auth.index) ||
+    pathname.startsWith(routes.settings.index) ||
+    pathname.startsWith(routes.admin.index) ||
+    pathname.startsWith(routes.gramophone.index);
+
+  if (!shouldProxy) {
+    return NextResponse.next();
+  }
+
+  const session = await getSessionFromRequest(req);
 
   const middlewares = [];
 
   if (pathname.startsWith(routes.auth.index)) {
-    // For auth routes, only check if user should be logged out
-    // Except for informational pages which should be accessible even if logged in
     if (pathname !== routes.auth.noAccess && pathname !== routes.auth.limitedAccess) {
       middlewares.push(hasToBeLoggedOutMiddleware);
     }
   } else if (pathname.startsWith(routes.admin.index)) {
-    // For admin routes, check login, then admin role
     middlewares.push(hasToBeLoggedInMiddleware);
-
-    // Only admin should access admin pages
     if (pathname === routes.admin.users) {
       middlewares.push(hasAdminRoleMiddleware);
     }
   } else if (pathname.startsWith(routes.gramophone.index)) {
-    // For gramophone routes, check login, then gramophone access
     middlewares.push(hasToBeLoggedInMiddleware);
     middlewares.push(hasGramophoneAccessMiddleware);
   } else if (pathname.startsWith(routes.settings.index)) {
-    // For settings routes, check login, then settings access
     middlewares.push(hasToBeLoggedInMiddleware);
     middlewares.push(hasSettingsAccessMiddleware);
   } else {
-    // For other routes, just require login
     middlewares.push(hasToBeLoggedInMiddleware);
   }
 
   return chain(...middlewares)(req, session);
 }
 
-export const config = {
-  runtime: 'nodejs',
-  matcher: [
-    '/',
-    '/auth/:path*',
-    '/settings/:path*',
-    '/admin/:path*',
-    '/gramophone/:path*',
-  ],
-};
+export default proxy;
+
