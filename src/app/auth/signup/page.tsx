@@ -1,0 +1,20 @@
+import { getAuthSession } from '@/lib/auth';
+import Signup from '@/app/pages/signup';
+import { Metadata } from 'next';
+import { redirect } from 'next/navigation';
+import { routes } from '@/types/routes';
+import { checkRolePermission } from '@/lib/auth/permissions';
+
+export const metadata: Metadata = {
+  title: 'Inscription',
+};
+
+export default async function LoginPage() {
+  const session = await getAuthSession();
+  if (session) {
+    const role = session.user.role ?? null;
+    const canAccessGramophone = checkRolePermission(role, 'gramophone', 'access');
+    redirect(canAccessGramophone ? routes.gramophone.index : routes.settings.index);
+  }
+  return <Signup />;
+}

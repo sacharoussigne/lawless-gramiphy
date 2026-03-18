@@ -1,0 +1,526 @@
+'use client';
+
+import { useMemo, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import {
+  Container,
+  Stack,
+  Card,
+  TextInput,
+  Button,
+  Text,
+  Group,
+  Anchor,
+  Image,
+  Alert,
+  Title,
+  Select,
+  Group as MantineGroup,
+  Menu,
+  SimpleGrid,
+  Modal,
+  ScrollArea,
+} from '@mantine/core';
+import {
+  IconMusic,
+  IconCopy,
+  IconCheck,
+  IconAlertCircle,
+  IconPlaylist,
+  IconDotsVertical,
+} from '@tabler/icons-react';
+import { downloadTrack, deleteTrack } from '@/app/_actions/tracks';
+import { addTrackToPlaylist, getPlaylists } from '@/app/_actions/playlists';
+import { handleAction } from '@/lib/action';
+import { notifications } from '@mantine/notifications';
+import Link from 'next/link';
+import { routes } from '@/types/routes';
+
+type Track = {
+  id: string;
+  title: string;
+  artist: string | null;
+  youtubeUrl: string;
+  s3Url: string;
+  duration: number | null;
+  thumbnail: string | null;
+   uploaderId: string | null;
+   uploaderName: string | null;
+   canDelete: boolean;
+  createdAt: Date;
+};
+
+type PlaylistSummary = {
+  id: string;
+  name: string;
+  description: string | null;
+  ownerId: string;
+  ownerName: string | null;
+  tracksCount: number;
+  createdAt: Date;
+  updatedAt: Date;
+  canEdit: boolean;
+};
+
+interface GramophonePageClientProps {
+  initialTracks: Track[];
+}
+
+function formatDuration(s: number | null) {
+  if (!s) return '—';
+  const m = Math.floor(s / 60);
+  const sec = s % 60;
+  return `${m}:${sec.toString().padStart(2, '0')}`;
+}
+
+export default function GramophonePageClient({ initialTracks }: GramophonePageClientProps) {
+  const router = useRouter();
+  const [url, setUrl] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [copied, setCopied] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [search, setSearch] = useState('');
+  const [uploaderFilter, setUploaderFilter] = useState<string | null>(null);
+  const [sortBy, setSortBy] = useState<'date_desc' | 'date_asc' | 'title' | 'artist'>('date_desc');
+  const [addingToPlaylistId, setAddingToPlaylistId] = useState<string | null>(null);
+  const [availablePlaylists, setAvailablePlaylists] = useState<PlaylistSummary[] | null>(null);
+  const [addToPlaylistTrack, setAddToPlaylistTrack] = useState<Track | null>(null);
+  const [playlistSearch, setPlaylistSearch] = useState('');
+
+  const uploaders = useMemo(
+    () => {
+      const map = new Map<string, string>();
+      initialTracks.forEach((t) => {
+        if (t.uploaderId && t.uploaderName) {
+          map.set(t.uploaderId, t.uploaderName);
+        }
+      });
+      return Array.from(map.entries()).map(([value, label]) => ({ value, label }));
+    },
+    [initialTracks],
+  );
+
+  const filteredTracks = useMemo(() => {
+    let list = [...initialTracks];
+
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      list = list.filter((t) => {
+        const inTitle = t.title.toLowerCase().includes(q);
+        const inArtist = t.artist?.toLowerCase().includes(q) ?? false;
+        const inUploader = t.uploaderName?.toLowerCase().includes(q) ?? false;
+        return inTitle || inArtist || inUploader;
+      });
+    }
+
+    if (uploaderFilter) {
+      list = list.filter((t) => t.uploaderId === uploaderFilter);
+    }
+
+    list.sort((a, b) => {
+      switch (sortBy) {
+        case 'title':
+          return a.title.localeCompare(b.title);
+        case 'artist':
+          return (a.artist ?? '').localeCompare(b.artist ?? '');
+        case 'date_asc':
+          return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+        case 'date_desc':
+        default:
+          return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+      }
+    });
+
+    return list;
+  }, [initialTracks, search, uploaderFilter, sortBy]);
+
+  const filteredPlaylists = useMemo(() => {
+    if (!availablePlaylists) return [];
+    if (!playlistSearch.trim()) return availablePlaylists;
+    const q = playlistSearch.toLowerCase();
+    return availablePlaylists.filter((pl) => {
+      const inName = pl.name.toLowerCase().includes(q);
+      const inOwner = pl.ownerName?.toLowerCase().includes(q) ?? false;
+      return inName || inOwner;
+    });
+  }, [availablePlaylists, playlistSearch]);
+
+  const handleDownload = async () => {
+    if (!url.trim()) return;
+    setLoading(true);
+    setError(null);
+
+    try {
+      const result = await downloadTrack(url.trim());
+      const data = handleAction(result);
+
+      if (data) {
+        setUrl('');
+        notifications.show({
+          title: 'Succès',
+          message: data.cached
+            ? 'Cette musique était déjà téléchargée'
+            : 'Musique téléchargée avec succès',
+          color: 'green',
+        });
+        router.refresh();
+      }
+    } catch (e: any) {
+      const errorMessage = e.message || 'Erreur inconnue';
+      setError(errorMessage);
+      notifications.show({
+        title: 'Erreur',
+        message: errorMessage,
+        color: 'red',
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const openAddToPlaylistMenu = async (track: Track) => {
+    setAddingToPlaylistId(track.id);
+    setAddToPlaylistTrack(track);
+    try {
+      if (!availablePlaylists) {
+        const result = await getPlaylists();
+        const data = handleAction(result) as PlaylistSummary[] | undefined;
+        if (data) {
+          setAvailablePlaylists(data);
+        }
+      }
+    } catch (e: any) {
+      const message = e.message || 'Erreur inconnue';
+      notifications.show({
+        title: 'Erreur',
+        message,
+        color: 'red',
+      });
+    } finally {
+      setAddingToPlaylistId(null);
+    }
+  };
+
+  const handleAddToPlaylist = async (playlistId: string, track: Track) => {
+    try {
+      const result = await addTrackToPlaylist(playlistId, track.id);
+      handleAction(result);
+      notifications.show({
+        title: 'Ajoutée à la playlist',
+        message: 'La musique a été ajoutée à la playlist',
+        color: 'green',
+      });
+      setAddToPlaylistTrack(null);
+      setPlaylistSearch('');
+    } catch (e: any) {
+      const message = e.message || 'Erreur inconnue';
+      notifications.show({
+        title: 'Erreur',
+        message,
+        color: 'red',
+      });
+    }
+  };
+
+  const copyLink = (s3Url: string, id: string) => {
+    navigator.clipboard.writeText(s3Url);
+    setCopied(id);
+    setTimeout(() => setCopied(null), 2000);
+    notifications.show({
+      title: 'Copié',
+      message: 'Lien copié dans le presse-papiers',
+      color: 'blue',
+    });
+  };
+
+  const handleDelete = async (track: Track) => {
+    if (!track.canDelete) {
+      return;
+    }
+
+    setDeletingId(track.id);
+    try {
+      const result = await deleteTrack(track.id);
+      handleAction(result);
+      notifications.show({
+        title: 'Supprimée',
+        message: 'La musique a été supprimée de la bibliothèque',
+        color: 'green',
+      });
+      router.refresh();
+    } catch (e: any) {
+      const errorMessage = e.message || 'Erreur inconnue';
+      notifications.show({
+        title: 'Erreur',
+        message: errorMessage,
+        color: 'red',
+      });
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
+  return (
+    <Container size="xl" py="xl">
+      <Stack gap="xl">
+        <Group justify="space-between" align="flex-start">
+          <Stack gap={4}>
+            <Group gap="sm">
+              <IconMusic size={40} stroke={1.5} />
+              <div>
+                <Title order={1}>Gramophone</Title>
+                <Text c="dimmed" size="sm" tt="uppercase" fw={300} lts={2}>
+                  Convertisseur YouTube → MP3 pour serveur RP
+                </Text>
+              </div>
+            </Group>
+          </Stack>
+          <Button
+            size="sm"
+            variant="filled"
+            leftSection={<IconPlaylist size={16} />}
+            component={Link}
+            href={routes.gramophone.playlists}
+          >
+            Gérer les playlists
+          </Button>
+        </Group>
+
+        <Card withBorder p="lg" radius="md" shadow="sm">
+          <Stack gap="md">
+            <TextInput
+              label="URL YouTube"
+              placeholder="https://www.youtube.com/watch?v=..."
+              value={url}
+              onChange={(e) => setUrl(e.currentTarget.value)}
+              onKeyDown={(e) => e.key === 'Enter' && !loading && url.trim() && handleDownload()}
+              disabled={loading}
+              rightSectionWidth={130}
+              rightSection={
+                <Button
+                  onClick={handleDownload}
+                  disabled={loading || !url.trim()}
+                  loading={loading}
+                  fullWidth
+                  size="sm"
+                >
+                  Télécharger
+                </Button>
+              }
+            />
+            <Text size="xs" c="dimmed">
+              Colle une URL YouTube pour convertir la vidéo en MP3 et l&apos;ajouter à ta bibliothèque.
+            </Text>
+            {error && (
+              <Alert icon={<IconAlertCircle size={16} />} title="Erreur" color="red">
+                {error}
+              </Alert>
+            )}
+            {loading && (
+              <Text size="sm" c="dimmed">
+                Téléchargement en cours… cela peut prendre 30–60 secondes.
+              </Text>
+            )}
+          </Stack>
+        </Card>
+
+        <Stack gap="md">
+          <Group justify="space-between" align="flex-end">
+            <Title order={2}>Bibliothèque ({filteredTracks.length})</Title>
+          </Group>
+
+          <Card withBorder radius="md" p="sm">
+            <MantineGroup gap="sm" grow>
+              <TextInput
+                placeholder="Rechercher (titre, artiste, uploader)"
+                value={search}
+                onChange={(e) => setSearch(e.currentTarget.value)}
+                size="sm"
+              />
+              <Select
+                placeholder="Filtrer par uploader"
+                data={uploaders}
+                value={uploaderFilter}
+                onChange={setUploaderFilter}
+                clearable
+                size="sm"
+              />
+              <Select
+                placeholder="Trier par"
+                value={sortBy}
+                onChange={(value) => setSortBy((value as any) ?? 'date_desc')}
+                data={[
+                  { value: 'date_desc', label: 'Plus récentes' },
+                  { value: 'date_asc', label: 'Plus anciennes' },
+                  { value: 'title', label: 'Titre' },
+                  { value: 'artist', label: 'Artiste' },
+                ]}
+                size="sm"
+              />
+            </MantineGroup>
+          </Card>
+
+          {filteredTracks.length === 0 ? (
+            <Text c="dimmed" ta="center" py="xl">
+              Aucune musique encore téléchargée.
+            </Text>
+          ) : (
+            <SimpleGrid
+              cols={{ base: 1, sm: 2, lg: 3 }}
+              spacing="md"
+            >
+              {filteredTracks.map((track) => (
+                <Card key={track.id} withBorder p="md" radius="md">
+                  <Group gap="md" align="flex-start" wrap="nowrap">
+                    {track.thumbnail && (
+                      <Image
+                        src={track.thumbnail}
+                        alt={track.title}
+                        w={72}
+                        h={72}
+                        fit="cover"
+                        radius="sm"
+                        style={{ flexShrink: 0 }}
+                        fallbackSrc="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='72' height='72'%3E%3Crect fill='%23ddd' width='72' height='72'/%3E%3C/svg%3E"
+                      />
+                    )}
+                    <Stack gap="xs" style={{ flex: 1, minWidth: 0 }}>
+                      <Text fw={500}>
+                        {track.title}
+                      </Text>
+                      <Text size="sm" c="dimmed">
+                        {track.artist && <>{track.artist} · </>}
+                        {formatDuration(track.duration)}
+                      </Text>
+                      <Text size="xs" c="dimmed">
+                        Ajoutée par {track.uploaderName ?? 'Inconnu'}
+                      </Text>
+                      <Group gap="xs" wrap="nowrap" align="center">
+                        <Anchor
+                          href={track.s3Url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          size="xs"
+                          style={{ flex: 1, minWidth: 0 }}
+                          ff="monospace"
+                          c="dimmed"
+                          truncate
+                        >
+                          {track.s3Url}
+                        </Anchor>
+                        <Button
+                          size="xs"
+                          variant={copied === track.id ? 'light' : 'default'}
+                          color={copied === track.id ? 'green' : undefined}
+                          leftSection={
+                            copied === track.id ? (
+                              <IconCheck size={14} />
+                            ) : (
+                              <IconCopy size={14} />
+                            )
+                          }
+                          onClick={() => copyLink(track.s3Url, track.id)}
+                        >
+                          {copied === track.id ? 'Copié' : 'Copier'}
+                        </Button>
+                        <Menu withinPortal>
+                          <Menu.Target>
+                            <Button
+                              size="xs"
+                              variant="subtle"
+                              px="xs"
+                              loading={addingToPlaylistId === track.id}
+                            >
+                              <IconDotsVertical size={16} />
+                            </Button>
+                          </Menu.Target>
+                          <Menu.Dropdown>
+                            <Menu.Label>Actions</Menu.Label>
+                            <Menu.Item
+                              onClick={() => openAddToPlaylistMenu(track)}
+                            >
+                              Ajouter à une playlist
+                            </Menu.Item>
+                            {track.canDelete && (
+                              <Menu.Item
+                                color="red"
+                                onClick={() => handleDelete(track)}
+                              >
+                                Supprimer
+                              </Menu.Item>
+                            )}
+                          </Menu.Dropdown>
+                        </Menu>
+                      </Group>
+                      <audio
+                        controls
+                        src={track.s3Url}
+                        style={{ width: '100%', marginTop: '0.5rem' }}
+                      />
+                    </Stack>
+                  </Group>
+                </Card>
+              ))}
+            </SimpleGrid>
+          )}
+        </Stack>
+
+        <Modal
+          opened={!!addToPlaylistTrack}
+          onClose={() => {
+            setAddToPlaylistTrack(null);
+            setPlaylistSearch('');
+          }}
+          title={addToPlaylistTrack ? `Ajouter "${addToPlaylistTrack.title}" à une playlist` : ''}
+          size="lg"
+        >
+          <Stack gap="sm">
+            <TextInput
+              placeholder="Rechercher une playlist (nom ou propriétaire)"
+              value={playlistSearch}
+              onChange={(event) => setPlaylistSearch(event.currentTarget.value)}
+            />
+            {!availablePlaylists || availablePlaylists.length === 0 ? (
+              <Text c="dimmed" size="sm">
+                Aucune playlist disponible pour le moment.
+              </Text>
+            ) : filteredPlaylists.length === 0 ? (
+              <Text c="dimmed" size="sm">
+                Aucune playlist ne correspond à la recherche.
+              </Text>
+            ) : (
+              <ScrollArea.Autosize mah={300}>
+                <Stack gap="xs">
+                  {filteredPlaylists.map((pl) => (
+                    <Group
+                      key={pl.id}
+                      justify="space-between"
+                      align="center"
+                    >
+                      <div>
+                        <Text size="sm" fw={500}>
+                          {pl.name}
+                        </Text>
+                        <Text size="xs" c="dimmed">
+                          {pl.tracksCount} piste{pl.tracksCount > 1 ? 's' : ''} · Propriétaire{' '}
+                          {pl.ownerName ?? 'Inconnu'}
+                        </Text>
+                      </div>
+                      <Button
+                        size="xs"
+                        onClick={() => addToPlaylistTrack && handleAddToPlaylist(pl.id, addToPlaylistTrack)}
+                      >
+                        Ajouter
+                      </Button>
+                    </Group>
+                  ))}
+                </Stack>
+              </ScrollArea.Autosize>
+            )}
+          </Stack>
+        </Modal>
+      </Stack>
+    </Container>
+  );
+}

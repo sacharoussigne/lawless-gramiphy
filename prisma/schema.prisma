@@ -1,0 +1,143 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  // url = env("DATABASE_URL")
+}
+
+model User {
+  id                    String                 @id
+  name                  String
+  email                 String
+  emailVerified         Boolean                @default(false)
+  image                 String?
+  createdAt             DateTime               @default(now())
+  updatedAt             DateTime               @updatedAt
+  role                  String?
+  banned                Boolean?               @default(false)
+  banReason             String?
+  banExpires            DateTime?
+  sessions              Session[]
+  accounts              Account[]
+  tracks                Track[]
+  playlists             Playlist[]
+  playlistCollaborators PlaylistCollaborator[]
+
+  @@unique([email])
+  @@map("user")
+}
+
+model Session {
+  id             String   @id
+  expiresAt      DateTime
+  token          String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  ipAddress      String?
+  userAgent      String?
+  userId         String
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  impersonatedBy String?
+
+  @@unique([token])
+  @@index([userId])
+  @@map("session")
+}
+
+model Account {
+  id                    String    @id
+  accountId             String
+  providerId            String
+  userId                String
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  password              String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  @@index([userId])
+  @@map("account")
+}
+
+model Verification {
+  id         String   @id
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([identifier])
+  @@map("verification")
+}
+
+model Track {
+  id              String          @id @default(cuid())
+  title           String
+  artist          String?
+  youtubeUrl      String
+  youtubeId       String          @unique
+  s3Key           String
+  s3Url           String
+  duration        Int?
+  thumbnail       String?
+  uploaderId      String?
+  uploaderName    String?
+  uploader        User?           @relation(fields: [uploaderId], references: [id], onDelete: SetNull)
+  playlistEntries PlaylistTrack[]
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  @@map("tracks")
+}
+
+model Playlist {
+  id            String                 @id @default(cuid())
+  name          String
+  description   String?
+  ownerId       String
+  owner         User                   @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  tracks        PlaylistTrack[]
+  collaborators PlaylistCollaborator[]
+  createdAt     DateTime               @default(now())
+  updatedAt     DateTime               @updatedAt
+
+  @@index([ownerId])
+  @@map("playlists")
+}
+
+model PlaylistTrack {
+  id         String   @id @default(cuid())
+  playlistId String
+  trackId    String
+  position   Int
+  playlist   Playlist @relation(fields: [playlistId], references: [id], onDelete: Cascade)
+  track      Track    @relation(fields: [trackId], references: [id], onDelete: Cascade)
+  createdAt  DateTime @default(now())
+
+  @@unique([playlistId, trackId])
+  @@index([playlistId])
+  @@index([trackId])
+  @@map("playlist_tracks")
+}
+
+model PlaylistCollaborator {
+  id         String   @id @default(cuid())
+  playlistId String
+  userId     String
+  playlist   Playlist @relation(fields: [playlistId], references: [id], onDelete: Cascade)
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt  DateTime @default(now())
+
+  @@unique([playlistId, userId])
+  @@index([playlistId])
+  @@index([userId])
+  @@map("playlist_collaborators")
+}
