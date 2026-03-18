@@ -51,6 +51,18 @@ async function findYtDlpCommand(): Promise<string> {
   }
 }
 
+function getYtDlpCommonArgs(): string[] {
+  const args: string[] = [];
+
+  const jsRuntimes = process.env.YTDLP_JS_RUNTIMES?.trim();
+  if (jsRuntimes) args.push('--js-runtimes', jsRuntimes);
+
+  const cookiesPath = process.env.YTDLP_COOKIES_PATH?.trim();
+  if (cookiesPath) args.push('--cookies', cookiesPath);
+
+  return args;
+}
+
 function extractYoutubeId(url: string): string | null {
   const patterns = [
     /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([a-zA-Z0-9_-]{11})/,
@@ -121,8 +133,10 @@ export async function POST(request: NextRequest) {
     // Run asynchronously and let client poll status.
     void (async () => {
       try {
+        const commonArgs = getYtDlpCommonArgs();
+
         // Metadata (spawn so we can cancel)
-        const metaArgs = ['--dump-json', '--no-playlist', url];
+        const metaArgs = [...commonArgs, '--dump-json', '--no-playlist', url];
         const metaProc = spawn(ytDlpCommand, metaArgs);
         setJob(jobId, { child: metaProc, status: 'fetching_meta', message: 'Récupération des informations…' });
 
@@ -137,6 +151,11 @@ export async function POST(request: NextRequest) {
         if (!latest || latest.status === 'canceled') return;
 
         if (metaExitCode !== 0) {
+          if (metaErr.includes('Sign in to confirm you’re not a bot')) {
+            throw new Error(
+              "YouTube bloque le téléchargement (vérification anti-bot). Configure des cookies côté serveur (YTDLP_COOKIES_PATH) ou utilise une autre source.",
+            );
+          }
           throw new Error(metaErr || 'Erreur lors de la récupération des métadonnées');
         }
 
@@ -153,7 +172,18 @@ export async function POST(request: NextRequest) {
 
         // Download / convert
         setJob(jobId, { status: 'downloading', message: 'Téléchargement en cours…' });
-        const dlArgs = ['-x', '--audio-format', 'mp3', '--audio-quality', '0', '--no-playlist', '-o', outputTemplate, url];
+        const dlArgs = [
+          ...commonArgs,
+          '-x',
+          '--audio-format',
+          'mp3',
+          '--audio-quality',
+          '0',
+          '--no-playlist',
+          '-o',
+          outputTemplate,
+          url,
+        ];
         const dlProc = spawn(ytDlpCommand, dlArgs);
         setJob(jobId, { child: dlProc, status: 'downloading', message: 'Téléchargement en cours…' });
 
@@ -166,6 +196,11 @@ export async function POST(request: NextRequest) {
         if (!afterDl || afterDl.status === 'canceled') return;
 
         if (dlExitCode !== 0) {
+          if (dlErr.includes('Sign in to confirm you’re not a bot')) {
+            throw new Error(
+              "YouTube bloque le téléchargement (vérification anti-bot). Configure des cookies côté serveur (YTDLP_COOKIES_PATH) ou utilise une autre source.",
+            );
+          }
           throw new Error(dlErr || 'Erreur lors du téléchargement');
         }
 
