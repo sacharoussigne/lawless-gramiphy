@@ -8,7 +8,7 @@ import {
 import { Notifications } from '@mantine/notifications';
 import { ModalsProvider } from '@mantine/modals';
 
-import './globals.scss';
+import './globals.css';
 import '@mantine/core/styles.css';
 import '@mantine/notifications/styles.css';
 import 'mantine-datatable/styles.css';

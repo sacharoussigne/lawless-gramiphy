@@ -1,1 +1,64 @@
 @import "tailwindcss";
+@import "@mantine/dates/styles.css";
+
+.modal-title h2 {
+  font-size: 1.5rem;
+  margin-bottom: 1rem;
+}
+
+.mantine-DatePickerInput-day:where([data-selected]),
+.mantine-DateInput-day:where([data-selected]) {
+  background-color: var(--mantine-primary-color-filled-hover) !important;
+  color: #fff !important;
+}
+
+/* Fix rounded corners for tables inside Paper components */
+.mantine-Paper-root {
+  overflow: hidden;
+}
+
+/* Native Mantine Table */
+.mantine-Paper-root .mantine-Table-root {
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.mantine-Paper-root .mantine-Table-thead .mantine-Table-tr:first-child .mantine-Table-th:first-child {
+  border-top-left-radius: var(--mantine-radius-md);
+}
+
+.mantine-Paper-root .mantine-Table-thead .mantine-Table-tr:first-child .mantine-Table-th:last-child {
+  border-top-right-radius: var(--mantine-radius-md);
+}
+
+.mantine-Paper-root .mantine-Table-tbody .mantine-Table-tr:last-child .mantine-Table-td:first-child {
+  border-bottom-left-radius: var(--mantine-radius-md);
+}
+
+.mantine-Paper-root .mantine-Table-tbody .mantine-Table-tr:last-child .mantine-Table-td:last-child {
+  border-bottom-right-radius: var(--mantine-radius-md);
+}
+
+/* DataTable (mantine-datatable) */
+.mantine-Paper-root table {
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.mantine-Paper-root thead tr:first-child th:first-child {
+  border-top-left-radius: var(--mantine-radius-md);
+}
+
+.mantine-Paper-root thead tr:first-child th:last-child {
+  border-top-right-radius: var(--mantine-radius-md);
+}
+
+.mantine-Paper-root tbody tr:last-child td:first-child {
+  border-bottom-left-radius: var(--mantine-radius-md);
+}
+
+.mantine-Paper-root tbody tr:last-child td:last-child {
+  border-bottom-right-radius: var(--mantine-radius-md);
+}
+
+@import "tailwindcss";
