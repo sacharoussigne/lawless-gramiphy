@@ -17,13 +17,13 @@ export const statement = {
 
 const ac = createAccessControl(statement);
 
-const visitor = ac.newRole({
+const user = ac.newRole({
     ...userAc.statements,
     settings: ["access"],
     gramophone: [],
 });
 
-const user = ac.newRole({
+const visitor = ac.newRole({
     ...userAc.statements,
     settings: ["access"],
     gramophone: ["access"],
