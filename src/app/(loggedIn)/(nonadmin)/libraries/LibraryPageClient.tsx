@@ -1,32 +1,35 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Stack,
   Card,
   TextInput,
   Button,
+  ActionIcon,
   Text,
   Group,
   Alert,
   Title,
   Select,
-  Group as MantineGroup,
   Modal,
   Slider,
-  ScrollArea,
+  Loader,
 } from '@mantine/core';
 import {
   IconMusic,
   IconAlertCircle,
   IconPlaylist,
   IconPlus,
+  IconSearch,
+  IconCheck,
+  IconSquare,
 } from '@tabler/icons-react';
 import TrackRow from '../../_components/Tracks/TrackRow';
+import AddToPlaylistModal from '../../_components/Tracks/AddToPlaylistModal';
 import useSingleAudioPlayer from '../../_components/Tracks/useSingleAudioPlayer';
-import { downloadTrack, deleteTrack } from '@/app/_actions/tracks';
-import { addTrackToPlaylist, getPlaylists } from '@/app/_actions/playlists';
+import { deleteTrack } from '@/app/_actions/tracks';
 import { handleAction } from '@/lib/action';
 import { notifications } from '@mantine/notifications';
 import Link from 'next/link';
@@ -46,18 +49,6 @@ type Track = {
   createdAt: Date;
 };
 
-type PlaylistSummary = {
-  id: string;
-  name: string;
-  description: string | null;
-  ownerId: string;
-  ownerName: string | null;
-  tracksCount: number;
-  createdAt: Date;
-  updatedAt: Date;
-  canEdit: boolean;
-};
-
 interface LibraryPageClientProps {
   initialTracks: Track[];
 }
@@ -75,16 +66,88 @@ export default function LibraryPageClient({ initialTracks }: LibraryPageClientPr
   const [url, setUrl] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [addModalOpened, setAddModalOpened] = useState(false);
+  const [spotlightOpened, setSpotlightOpened] = useState(false);
+  const [spotlightExpanded, setSpotlightExpanded] = useState(false);
+  const [downloadJobId, setDownloadJobId] = useState<string | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [uploaderFilter, setUploaderFilter] = useState<string | null>(null);
   const [sortBy, setSortBy] = useState<'date_desc' | 'date_asc' | 'title' | 'artist'>('date_desc');
-  const [addingToPlaylistId, setAddingToPlaylistId] = useState<string | null>(null);
-  const [availablePlaylists, setAvailablePlaylists] = useState<PlaylistSummary[] | null>(null);
   const [addToPlaylistTrack, setAddToPlaylistTrack] = useState<Track | null>(null);
-  const [playlistSearch, setPlaylistSearch] = useState('');
+  const urlInputRef = useRef<HTMLInputElement | null>(null);
+
+  const openSpotlight = () => {
+    if (loading) return;
+    setSpotlightOpened(true);
+    setSpotlightExpanded(false);
+    setDownloadJobId(null);
+    setUrl('');
+    setError(null);
+  };
+
+  const closeSpotlight = () => {
+    if (loading) return;
+    setSpotlightOpened(false);
+    setSpotlightExpanded(false);
+    setDownloadJobId(null);
+    setUrl('');
+    setError(null);
+  };
+
+  useEffect(() => {
+    if (!spotlightOpened) return;
+    urlInputRef.current?.focus();
+  }, [spotlightOpened]);
+
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      const tag = target?.tagName?.toLowerCase();
+      const isEditable =
+        tag === 'input' || tag === 'textarea' || (target as any)?.isContentEditable === true;
+
+      if (isEditable) return;
+
+      if (e.repeat) return;
+      const key = e.key.toLowerCase();
+
+      if ((e.ctrlKey || e.metaKey) && key === 'k') {
+        e.preventDefault();
+        if (!loading) {
+          setSpotlightOpened(true);
+          setUrl('');
+          setError(null);
+        }
+        return;
+      }
+
+      if (!e.ctrlKey && !e.metaKey && e.key === '/') {
+        e.preventDefault();
+        if (!loading) {
+          setSpotlightOpened(true);
+          setSpotlightExpanded(false);
+          setUrl('');
+          setError(null);
+        }
+        return;
+      }
+
+      if (key === 'escape') {
+        if (loading) return;
+        if (spotlightOpened) {
+          e.preventDefault();
+          setSpotlightOpened(false);
+          setSpotlightExpanded(false);
+          setUrl('');
+          setError(null);
+        }
+      }
+    };
+
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [loading, spotlightOpened]);
 
   const uploaders = useMemo(() => {
     const map = new Map<string, string>();
@@ -130,36 +193,43 @@ export default function LibraryPageClient({ initialTracks }: LibraryPageClientPr
     return list;
   }, [initialTracks, search, uploaderFilter, sortBy]);
 
-  const filteredPlaylists = useMemo(() => {
-    if (!availablePlaylists) return [];
-    if (!playlistSearch.trim()) return availablePlaylists;
-    const q = playlistSearch.toLowerCase();
-    return availablePlaylists.filter((pl) => {
-      const inName = pl.name.toLowerCase().includes(q);
-      const inOwner = pl.ownerName?.toLowerCase().includes(q) ?? false;
-      return inName || inOwner;
-    });
-  }, [availablePlaylists, playlistSearch]);
-
   const handleDownload = async () => {
     if (!url.trim()) return;
     setLoading(true);
     setError(null);
+    setSpotlightExpanded(true);
+
+    const rawUrl = url.trim();
+    setUrl('');
 
     try {
-      const result = await downloadTrack(url.trim());
-      const data = handleAction(result);
+      const res = await fetch('/api/tracks/download', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: rawUrl }),
+      });
+      const payload = await res.json();
 
-      if (data) {
-        setUrl('');
-        setAddModalOpened(false);
+      // cached track (already exists)
+      if (payload?.data?.cached) {
+        setLoading(false);
+        setSpotlightOpened(false);
+        setSpotlightExpanded(false);
         notifications.show({
-          title: 'Succès',
-          message: data.cached ? 'Cette musique était déjà téléchargée' : 'Musique téléchargée avec succès',
+          title: 'Déjà présent',
+          message: 'Cette musique est déjà dans la bibliothèque',
           color: 'green',
         });
         router.refresh();
+        return;
       }
+
+      const jobId = payload?.data?.jobId as string | undefined;
+      if (!jobId) {
+        throw new Error(payload?.error || 'Impossible de démarrer le téléchargement');
+      }
+
+      setDownloadJobId(jobId);
     } catch (e: any) {
       const errorMessage = e.message || 'Erreur inconnue';
       setError(errorMessage);
@@ -168,53 +238,83 @@ export default function LibraryPageClient({ initialTracks }: LibraryPageClientPr
         message: errorMessage,
         color: 'red',
       });
-    } finally {
       setLoading(false);
     }
   };
 
-  const openAddToPlaylistMenu = async (track: Track) => {
-    setAddingToPlaylistId(track.id);
-    setAddToPlaylistTrack(track);
+  const stopDownload = async () => {
+    if (!downloadJobId) return;
     try {
-      if (!availablePlaylists) {
-        const result = await getPlaylists();
-        const data = handleAction(result) as PlaylistSummary[] | undefined;
-        if (data) {
-          setAvailablePlaylists(data);
-        }
-      }
-    } catch (e: any) {
-      const message = e.message || 'Erreur inconnue';
+      await fetch(`/api/tracks/download?jobId=${encodeURIComponent(downloadJobId)}`, {
+        method: 'DELETE',
+      });
       notifications.show({
-        title: 'Erreur',
-        message,
-        color: 'red',
+        title: 'Téléchargement annulé',
+        message: 'Le téléchargement a été stoppé',
+        color: 'yellow',
       });
     } finally {
-      setAddingToPlaylistId(null);
+      setLoading(false);
+      setDownloadJobId(null);
+      setSpotlightExpanded(false);
     }
   };
 
-  const handleAddToPlaylist = async (playlistId: string, track: Track) => {
-    try {
-      const result = await addTrackToPlaylist(playlistId, track.id);
-      handleAction(result);
-      notifications.show({
-        title: 'Ajoutée à la playlist',
-        message: 'La musique a été ajoutée à la playlist',
-        color: 'green',
-      });
-      setAddToPlaylistTrack(null);
-      setPlaylistSearch('');
-    } catch (e: any) {
-      const message = e.message || 'Erreur inconnue';
-      notifications.show({
-        title: 'Erreur',
-        message,
-        color: 'red',
-      });
-    }
+  useEffect(() => {
+    if (!downloadJobId) return;
+
+    let cancelled = false;
+    const interval = window.setInterval(async () => {
+      try {
+        const res = await fetch(`/api/tracks/download?jobId=${encodeURIComponent(downloadJobId)}`);
+        const payload = await res.json();
+        const data = payload?.data;
+        if (!data || cancelled) return;
+
+        if (data.status === 'done') {
+          window.clearInterval(interval);
+          setLoading(false);
+          setDownloadJobId(null);
+          notifications.show({
+            title: 'Succès',
+            message: 'Musique téléchargée avec succès',
+            color: 'green',
+          });
+          router.refresh();
+          setTimeout(() => {
+            if (cancelled) return;
+            setSpotlightOpened(false);
+            setSpotlightExpanded(false);
+            setError(null);
+          }, 900);
+        } else if (data.status === 'error') {
+          window.clearInterval(interval);
+          setLoading(false);
+          setDownloadJobId(null);
+          setError(data.message ?? 'Erreur');
+          setSpotlightExpanded(true);
+        } else if (data.status === 'canceled') {
+          window.clearInterval(interval);
+          setLoading(false);
+          setDownloadJobId(null);
+          setSpotlightExpanded(false);
+        } else {
+          // keep expanded while running
+          setSpotlightExpanded(true);
+        }
+      } catch {
+        // ignore transient polling errors
+      }
+    }, 700);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
+  }, [downloadJobId, router]);
+
+  const openAddToPlaylistMenu = (track: Track) => {
+    setAddToPlaylistTrack(track);
   };
 
   const copyLink = (s3Url: string, id: string) => {
@@ -269,38 +369,27 @@ export default function LibraryPageClient({ initialTracks }: LibraryPageClientPr
               </div>
             </Group>
           </Stack>
-          <Button
-            size="sm"
-            variant="filled"
-            leftSection={<IconPlaylist size={16} />}
-            component={Link}
-            href={routes.playlists.index}
-          >
-            Playlists
-          </Button>
-        </Group>
-
-        <Card withBorder p="lg" radius="md" shadow="sm">
-          <Group justify="space-between" align="center" wrap="nowrap">
-            <Stack gap={2} style={{ minWidth: 0 }}>
-              <Text fw={600}>Ajouter une musique</Text>
-              <Text size="xs" c="dimmed" lineClamp={2}>
-                Colle une URL YouTube pour convertir la vidéo en MP3 et l&apos;ajouter à ta bibliothèque.
-              </Text>
-            </Stack>
+          <Group gap="xs" align="center">
             <Button
               size="sm"
-              onClick={() => {
-                setAddModalOpened(true);
-                setError(null);
-              }}
+              variant="filled"
+              leftSection={<IconPlaylist size={16} />}
+              component={Link}
+              href={routes.playlists.index}
+            >
+              Playlists
+            </Button>
+            <Button
+              size="sm"
+              variant="light"
               leftSection={<IconPlus size={16} />}
+              onClick={openSpotlight}
               disabled={loading}
             >
               Ajouter
             </Button>
           </Group>
-        </Card>
+        </Group>
 
         <Stack gap="md">
           <Group justify="space-between" align="center" wrap="nowrap" gap="md">
@@ -323,12 +412,13 @@ export default function LibraryPageClient({ initialTracks }: LibraryPageClientPr
           </Group>
 
           <Card withBorder radius="md" p="sm">
-            <MantineGroup gap="sm" grow>
+            <Group gap="sm" align="flex-end" justify="space-between" wrap="wrap">
               <TextInput
                 placeholder="Rechercher (titre, artiste, uploader)"
                 value={search}
                 onChange={(e) => setSearch(e.currentTarget.value)}
                 size="sm"
+                style={{ flex: 1, minWidth: 220, maxWidth: 420 }}
               />
               <Select
                 placeholder="Uploader"
@@ -337,6 +427,7 @@ export default function LibraryPageClient({ initialTracks }: LibraryPageClientPr
                 onChange={setUploaderFilter}
                 clearable
                 size="sm"
+                style={{ width: 200 }}
               />
               <Select
                 placeholder="Tri"
@@ -349,8 +440,9 @@ export default function LibraryPageClient({ initialTracks }: LibraryPageClientPr
                   { value: 'artist', label: 'Artiste' },
                 ]}
                 size="sm"
+                style={{ width: 200 }}
               />
-            </MantineGroup>
+            </Group>
           </Card>
 
           {filteredTracks.length === 0 ? (
@@ -387,7 +479,6 @@ export default function LibraryPageClient({ initialTracks }: LibraryPageClientPr
                   copiedTrackId={copied}
                   onOpenAddToPlaylistMenu={(t) => void openAddToPlaylistMenu(t as any)}
                   onDeleteTrack={(t) => void handleDelete(t as any)}
-                  actionsLoading={addingToPlaylistId === track.id}
                   deleting={deletingId === track.id}
                 />
               ))}
@@ -396,114 +487,112 @@ export default function LibraryPageClient({ initialTracks }: LibraryPageClientPr
         </Stack>
 
         <Modal
-          opened={addModalOpened}
-          onClose={() => {
-            setAddModalOpened(false);
-            setUrl('');
-            setError(null);
+          opened={spotlightOpened}
+          onClose={closeSpotlight}
+          withCloseButton={false}
+          closeOnClickOutside={!loading}
+          closeOnEscape={!loading}
+          centered={false}
+          yOffset={70}
+          size="lg"
+          title=""
+          styles={{
+            header: { display: 'none' },
+            content: { padding: 0, borderRadius: 28, overflow: 'visible' },
+            body: { padding: 0 },
           }}
-          title="Ajouter à la bibliothèque"
-          size="sm"
         >
-          <Stack gap="sm">
-            <TextInput
-              label="URL YouTube"
-              placeholder="https://www.youtube.com/watch?v=..."
-              value={url}
-              onChange={(e) => setUrl(e.currentTarget.value)}
-              onKeyDown={(e) => e.key === 'Enter' && !loading && url.trim() && handleDownload()}
-              disabled={loading}
-              autoFocus
-            />
-
-            {loading ? (
-              <Text size="sm" c="dimmed">
-                Conversion en cours… cela peut prendre 30–60 secondes.
-              </Text>
-            ) : (
-              <Text size="xs" c="dimmed">
-                Le téléchargement peut prendre 30–60 secondes.
-              </Text>
-            )}
-
-            {error && (
-              <Alert icon={<IconAlertCircle size={16} />} title="Erreur" color="red">
-                {error}
-              </Alert>
-            )}
-
-            <Group justify="flex-end" mt="md">
-              <Button
-                variant="default"
-                onClick={() => {
-                  setAddModalOpened(false);
-                  setUrl('');
-                  setError(null);
+          <div style={{ width: 'min(760px, 92vw)', margin: '0 auto', padding: '10px 14px' }}>
+            <Group
+              gap="xs"
+              align="center"
+              wrap="nowrap"
+              style={{
+                borderRadius: 22,
+                padding: '10px 12px',
+                background: 'rgba(255,255,255,0.07)',
+                boxShadow: '0 14px 36px rgba(0,0,0,0.35)',
+                backdropFilter: 'blur(14px)',
+                WebkitBackdropFilter: 'blur(14px)',
+              }}
+            >
+              <div style={{ paddingLeft: 4, opacity: 0.9, width: 18, height: 18, display: 'grid', placeItems: 'center' }}>
+                {loading ? <Loader size={18} type="oval" /> : <IconSearch size={18} />}
+              </div>
+              <TextInput
+                ref={urlInputRef}
+                placeholder={loading ? 'Téléchargement en cours…' : 'URL YouTube (ex: https://www.youtube.com/watch?v=...)'}
+                value={loading ? '' : url}
+                onChange={(e) => setUrl(e.currentTarget.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !loading && url.trim()) handleDownload();
+                  if (e.key === 'Escape') {
+                    if (loading) return;
+                    e.preventDefault();
+                    closeSpotlight();
+                  }
                 }}
                 disabled={loading}
-              >
-                Annuler
-              </Button>
-              <Button
-                onClick={handleDownload}
-                disabled={loading || !url.trim()}
-                loading={loading}
-              >
-                Ajouter
-              </Button>
+                styles={{
+                  root: { flex: 1 },
+                  input: {
+                    border: 'none',
+                    outline: 'none',
+                    background: 'transparent',
+                    fontSize: 16,
+                    height: 34,
+                    paddingLeft: 2,
+                  },
+                }}
+              />
+              {loading ? (
+                <ActionIcon
+                  variant="subtle"
+                  size="lg"
+                  radius="xl"
+                  color="red"
+                  onClick={stopDownload}
+                  aria-label="Stopper le téléchargement"
+                >
+                  <IconSquare size={18} />
+                </ActionIcon>
+              ) : (
+                <ActionIcon
+                  variant="subtle"
+                  size="lg"
+                  radius="xl"
+                  disabled={!url.trim()}
+                  onClick={() => url.trim() && handleDownload()}
+                  aria-label="Valider l’URL"
+                >
+                  <IconCheck size={18} />
+                </ActionIcon>
+              )}
             </Group>
-          </Stack>
+
+            {(spotlightExpanded || loading || error) && (
+              <Stack gap={6} style={{ padding: '10px 6px 14px 6px' }}>
+                <Text size="xs" c="dimmed">
+                  {loading
+                    ? 'Conversion en cours… cela peut prendre 30–60 secondes.'
+                    : 'Appuie sur Entrée pour lancer le téléchargement.'}
+                </Text>
+
+                {error && (
+                  <Alert icon={<IconAlertCircle size={16} />} title="Erreur" color="red">
+                    {error}
+                  </Alert>
+                )}
+              </Stack>
+            )}
+          </div>
         </Modal>
 
-        <Modal
+        <AddToPlaylistModal
           opened={!!addToPlaylistTrack}
-          onClose={() => {
-            setAddToPlaylistTrack(null);
-            setPlaylistSearch('');
-          }}
-          title={addToPlaylistTrack ? `Ajouter \"${addToPlaylistTrack.title}\" à une playlist` : ''}
-          size="lg"
-        >
-          <Stack gap="sm">
-            <TextInput
-              placeholder="Rechercher une playlist (nom ou propriétaire)"
-              value={playlistSearch}
-              onChange={(event) => setPlaylistSearch(event.currentTarget.value)}
-            />
-            {!availablePlaylists || availablePlaylists.length === 0 ? (
-              <Text c="dimmed" size="sm">
-                Aucune playlist disponible pour le moment.
-              </Text>
-            ) : filteredPlaylists.length === 0 ? (
-              <Text c="dimmed" size="sm">
-                Aucune playlist ne correspond à la recherche.
-              </Text>
-            ) : (
-              <ScrollArea.Autosize mah={300}>
-                <Stack gap="xs">
-                  {filteredPlaylists.map((pl) => (
-                    <Group key={pl.id} justify="space-between" align="center">
-                      <div>
-                        <Text size="sm" fw={500}>
-                          {pl.name}
-                        </Text>
-                        <Text size="xs" c="dimmed">
-                          {pl.tracksCount} piste{pl.tracksCount > 1 ? 's' : ''} · Propriétaire {pl.ownerName ?? 'Inconnu'}
-                        </Text>
-                      </div>
-                      <Button
-                        size="xs"
-                        onClick={() => addToPlaylistTrack && handleAddToPlaylist(pl.id, addToPlaylistTrack)}
-                      >
-                        Ajouter
-                      </Button>
-                    </Group>
-                  ))}
-                </Stack>
-              </ScrollArea.Autosize>
-            )}
-          </Stack>
-        </Modal>
+          track={addToPlaylistTrack ? { id: addToPlaylistTrack.id, title: addToPlaylistTrack.title } : null}
+          onClose={() => setAddToPlaylistTrack(null)}
+        />
     </Stack>
   );
 }

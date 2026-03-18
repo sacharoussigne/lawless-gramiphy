@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
@@ -8,20 +8,17 @@ import {
   Button,
   Card,
   Group,
-  Modal,
-  ScrollArea,
   Slider,
   Stack,
   Text,
-  TextInput,
   Title,
 } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { IconAlertCircle, IconCopy, IconPlayerPause, IconPlayerPlay, IconTrash, IconPlaylist, IconMusic } from '@tabler/icons-react';
-import { addTrackToPlaylist, getPlaylists } from '@/app/_actions/playlists';
 import { deleteTrack } from '@/app/_actions/tracks';
 import { handleAction } from '@/lib/action';
 import useSingleAudioPlayer from './useSingleAudioPlayer';
+import AddToPlaylistModal from './AddToPlaylistModal';
 import { routes } from '@/types/routes';
 
 type Track = {
@@ -36,18 +33,6 @@ type Track = {
   uploaderName: string | null;
   canDelete: boolean;
   createdAt: Date;
-};
-
-type PlaylistSummary = {
-  id: string;
-  name: string;
-  description: string | null;
-  ownerId: string;
-  ownerName: string | null;
-  tracksCount: number;
-  createdAt: Date;
-  updatedAt: Date;
-  canEdit: boolean;
 };
 
 function formatDuration(s: number) {
@@ -66,20 +51,6 @@ export default function TrackDetailsPageClient({ track }: { track: Track }) {
   const [copied, setCopied] = useState(false);
 
   const [addToPlaylistOpened, setAddToPlaylistOpened] = useState(false);
-  const [availablePlaylists, setAvailablePlaylists] = useState<PlaylistSummary[] | null>(null);
-  const [playlistSearch, setPlaylistSearch] = useState('');
-  const [addingToPlaylistId, setAddingToPlaylistId] = useState<string | null>(null);
-
-  const filteredPlaylists = useMemo(() => {
-    if (!availablePlaylists) return [];
-    if (!playlistSearch.trim()) return availablePlaylists;
-    const q = playlistSearch.toLowerCase();
-    return availablePlaylists.filter((pl) => {
-      const inName = pl.name.toLowerCase().includes(q);
-      const inOwner = pl.ownerName?.toLowerCase().includes(q) ?? false;
-      return inName || inOwner;
-    });
-  }, [availablePlaylists, playlistSearch]);
 
   const active = audioPlayer.currentTrackId === track.id;
   const durationSeconds = active ? audioPlayer.duration || track.duration || 0 : track.duration || audioPlayer.duration || 0;
@@ -127,49 +98,9 @@ export default function TrackDetailsPageClient({ track }: { track: Track }) {
     }
   };
 
-  const openAddToPlaylistModal = async () => {
+  const openAddToPlaylistModal = () => {
     setAddToPlaylistOpened(true);
     setError(null);
-    try {
-      if (!availablePlaylists) {
-        const result = await getPlaylists();
-        const data = handleAction(result) as PlaylistSummary[] | undefined;
-        if (data) setAvailablePlaylists(data);
-      }
-    } catch (e: any) {
-      const message = e.message || 'Erreur inconnue';
-      setError(message);
-      notifications.show({
-        title: 'Erreur',
-        message,
-        color: 'red',
-      });
-    }
-  };
-
-  const handleAddToPlaylist = async (playlistId: string) => {
-    setAddingToPlaylistId(playlistId);
-    try {
-      const result = await addTrackToPlaylist(playlistId, track.id);
-      handleAction(result);
-      notifications.show({
-        title: 'Ajoutée à la playlist',
-        message: 'La musique a été ajoutée à la playlist',
-        color: 'green',
-      });
-      setAddToPlaylistOpened(false);
-      setPlaylistSearch('');
-    } catch (e: any) {
-      const message = e.message || 'Erreur inconnue';
-      setError(message);
-      notifications.show({
-        title: 'Erreur',
-        message,
-        color: 'red',
-      });
-    } finally {
-      setAddingToPlaylistId(null);
-    }
   };
 
   return (
@@ -320,58 +251,11 @@ export default function TrackDetailsPageClient({ track }: { track: Track }) {
         </Stack>
       </Card>
 
-      <Modal
+      <AddToPlaylistModal
         opened={addToPlaylistOpened}
-        onClose={() => {
-          setAddToPlaylistOpened(false);
-          setPlaylistSearch('');
-        }}
-        title="Ajouter à une playlist"
-        size="lg"
-      >
-        <Stack gap="sm">
-          <TextInput
-            placeholder="Rechercher une playlist (nom ou propriétaire)"
-            value={playlistSearch}
-            onChange={(event) => setPlaylistSearch(event.currentTarget.value)}
-          />
-
-          {!availablePlaylists || availablePlaylists.length === 0 ? (
-            <Text c="dimmed" size="sm">
-              Aucune playlist disponible pour le moment.
-            </Text>
-          ) : filteredPlaylists.length === 0 ? (
-            <Text c="dimmed" size="sm">
-              Aucune playlist ne correspond à la recherche.
-            </Text>
-          ) : (
-            <ScrollArea.Autosize mah={320}>
-              <Stack gap="xs">
-                {filteredPlaylists.map((pl) => (
-                  <Group key={pl.id} justify="space-between" align="center">
-                    <div style={{ minWidth: 0 }}>
-                      <Text size="sm" fw={500} lineClamp={1}>
-                        {pl.name}
-                      </Text>
-                      <Text size="xs" c="dimmed" lineClamp={1}>
-                        {pl.tracksCount} piste{pl.tracksCount > 1 ? 's' : ''} · Propriétaire {pl.ownerName ?? 'Inconnu'}
-                      </Text>
-                    </div>
-                    <Button
-                      size="xs"
-                      onClick={() => handleAddToPlaylist(pl.id)}
-                      loading={addingToPlaylistId === pl.id}
-                      disabled={addingToPlaylistId !== null && addingToPlaylistId !== pl.id}
-                    >
-                      Ajouter
-                    </Button>
-                  </Group>
-                ))}
-              </Stack>
-            </ScrollArea.Autosize>
-          )}
-        </Stack>
-      </Modal>
+        track={{ id: track.id, title: track.title }}
+        onClose={() => setAddToPlaylistOpened(false)}
+      />
     </Stack>
   );
 }
