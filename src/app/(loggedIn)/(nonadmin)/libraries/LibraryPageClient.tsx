@@ -197,7 +197,7 @@ export default function LibraryPageClient({ initialTracks }: LibraryPageClientPr
     if (!url.trim()) return;
     setLoading(true);
     setError(null);
-    setSpotlightExpanded(true);
+    setSpotlightExpanded(false);
 
     const rawUrl = url.trim();
     setUrl('');
@@ -300,7 +300,7 @@ export default function LibraryPageClient({ initialTracks }: LibraryPageClientPr
           setSpotlightExpanded(false);
         } else {
           // keep expanded while running
-          setSpotlightExpanded(true);
+          setSpotlightExpanded(false);
         }
       } catch {
         // ignore transient polling errors
@@ -498,93 +498,104 @@ export default function LibraryPageClient({ initialTracks }: LibraryPageClientPr
           title=""
           styles={{
             header: { display: 'none' },
-            content: { padding: 0, borderRadius: 28, overflow: 'visible' },
-            body: { padding: 0 },
+            content: {
+              padding: 0,
+              overflow: 'visible',
+              background: 'transparent',
+              boxShadow: 'none',
+              border: 'none',
+            },
+            body: { padding: 0, background: 'transparent' },
           }}
         >
           <div style={{ width: 'min(760px, 92vw)', margin: '0 auto', padding: '10px 14px' }}>
-            <Group
-              gap="xs"
-              align="center"
-              wrap="nowrap"
+            <div
               style={{
                 borderRadius: 22,
-                padding: '10px 12px',
-                background: 'rgba(255,255,255,0.07)',
+                // background: 'rgba(255,255,255,0.07)',
+                background: 'rgba(255,255,255,0.12)',
                 boxShadow: '0 14px 36px rgba(0,0,0,0.35)',
                 backdropFilter: 'blur(14px)',
                 WebkitBackdropFilter: 'blur(14px)',
+                padding: '10px 12px',
               }}
             >
-              <div style={{ paddingLeft: 4, opacity: 0.9, width: 18, height: 18, display: 'grid', placeItems: 'center' }}>
-                {loading ? <Loader size={18} type="oval" /> : <IconSearch size={18} />}
-              </div>
-              <TextInput
-                ref={urlInputRef}
-                placeholder={loading ? 'Téléchargement en cours…' : 'URL YouTube (ex: https://www.youtube.com/watch?v=...)'}
-                value={loading ? '' : url}
-                onChange={(e) => setUrl(e.currentTarget.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !loading && url.trim()) handleDownload();
-                  if (e.key === 'Escape') {
-                    if (loading) return;
-                    e.preventDefault();
-                    closeSpotlight();
+              <Group gap="xs" align="center" wrap="nowrap">
+                <div
+                  style={{
+                    paddingLeft: 4,
+                    opacity: 0.9,
+                    width: 18,
+                    height: 18,
+                    display: 'grid',
+                    placeItems: 'center',
+                  }}
+                >
+                  {loading ? <Loader size={18} type="oval" /> : <IconSearch size={18} />}
+                </div>
+                <TextInput
+                  ref={urlInputRef}
+                  placeholder={
+                    loading ? 'Téléchargement en cours…' : 'URL YouTube (ex: https://www.youtube.com/watch?v=...)'
                   }
-                }}
-                disabled={loading}
-                styles={{
-                  root: { flex: 1 },
-                  input: {
-                    border: 'none',
-                    outline: 'none',
-                    background: 'transparent',
-                    fontSize: 16,
-                    height: 34,
-                    paddingLeft: 2,
-                  },
-                }}
-              />
-              {loading ? (
-                <ActionIcon
-                  variant="subtle"
-                  size="lg"
-                  radius="xl"
-                  color="red"
-                  onClick={stopDownload}
-                  aria-label="Stopper le téléchargement"
-                >
-                  <IconSquare size={18} />
-                </ActionIcon>
-              ) : (
-                <ActionIcon
-                  variant="subtle"
-                  size="lg"
-                  radius="xl"
-                  disabled={!url.trim()}
-                  onClick={() => url.trim() && handleDownload()}
-                  aria-label="Valider l’URL"
-                >
-                  <IconCheck size={18} />
-                </ActionIcon>
-              )}
-            </Group>
-
-            {(spotlightExpanded || loading || error) && (
-              <Stack gap={6} style={{ padding: '10px 6px 14px 6px' }}>
-                <Text size="xs" c="dimmed">
-                  {loading
-                    ? 'Conversion en cours… cela peut prendre 30–60 secondes.'
-                    : 'Appuie sur Entrée pour lancer le téléchargement.'}
-                </Text>
-
-                {error && (
-                  <Alert icon={<IconAlertCircle size={16} />} title="Erreur" color="red">
-                    {error}
-                  </Alert>
+                  value={loading ? '' : url}
+                  onChange={(e) => setUrl(e.currentTarget.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !loading && url.trim()) handleDownload();
+                    if (e.key === 'Escape') {
+                      if (loading) return;
+                      e.preventDefault();
+                      closeSpotlight();
+                    }
+                  }}
+                  disabled={loading}
+                  styles={{
+                    root: { flex: 1 },
+                    input: {
+                      border: 'none',
+                      outline: 'none',
+                      background: 'transparent',
+                      fontSize: 16,
+                      height: 34,
+                      paddingLeft: 2,
+                    },
+                  }}
+                />
+                {loading ? (
+                  <ActionIcon
+                    variant="subtle"
+                    size="lg"
+                    radius="xl"
+                    color="red"
+                    onClick={stopDownload}
+                    aria-label="Stopper le téléchargement"
+                  >
+                    <IconSquare size={18} />
+                  </ActionIcon>
+                ) : (
+                  <ActionIcon
+                    variant="subtle"
+                    size="lg"
+                    radius="xl"
+                    disabled={!url.trim()}
+                    onClick={() => url.trim() && handleDownload()}
+                    aria-label="Valider l’URL"
+                  >
+                    <IconCheck size={18} />
+                  </ActionIcon>
                 )}
-              </Stack>
-            )}
+              </Group>
+
+              {(spotlightExpanded || error) && (
+                <Stack gap={6} style={{ paddingTop: 10, paddingLeft: 6, paddingRight: 6, paddingBottom: 2 }}>
+                  {error && (
+                    <Alert icon={<IconAlertCircle size={16} />} title="Erreur" color="red">
+                      {error}
+                    </Alert>
+                  )}
+                </Stack>
+              )}
+            </div>
           </div>
         </Modal>
 
