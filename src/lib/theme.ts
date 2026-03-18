@@ -2,7 +2,6 @@ import { createTheme, DEFAULT_THEME } from '@mantine/core';
 
 const theme = createTheme({
   ...DEFAULT_THEME,
-  defaultColorScheme: 'dark',
   colors: {
     dark: [
       '#F1F3F5',
@@ -75,7 +74,9 @@ const theme = createTheme({
           backgroundColor: 'var(--mantine-color-dark-9)',
         },
         main: {
-          backgroundColor: 'var(--mantine-color-dark-9)',
+          background:
+            'radial-gradient(900px 420px at 10% 0%, rgba(30, 215, 96, 0.14) 0%, rgba(18, 20, 23, 0) 55%), radial-gradient(700px 360px at 90% 10%, rgba(29, 185, 84, 0.10) 0%, rgba(18, 20, 23, 0) 60%), var(--mantine-color-dark-9)',
+          color: 'var(--mantine-color-dark-0)',
         },
       },
     },
@@ -83,7 +84,75 @@ const theme = createTheme({
       styles: {
         root: {
           borderRadius: '10px',
+          fontWeight: 700,
+          color: 'var(--mantine-color-dark-0)',
+          backgroundColor: 'transparent',
+        },
+        label: {
+          color: 'var(--mantine-color-dark-0)',
+        },
+        description: {
+          color: 'var(--mantine-color-dark-2)',
+        },
+        section: {
+          color: 'var(--mantine-color-dark-1)',
+        },
+      },
+    },
+    Text: {
+      styles: {
+        root: {
+          color: 'var(--mantine-color-dark-0)',
+        },
+      },
+    },
+    Title: {
+      styles: {
+        root: {
+          color: 'var(--mantine-color-dark-0)',
+        },
+      },
+    },
+    Input: {
+      styles: {
+        input: {
+          backgroundColor: 'rgba(33, 37, 41, 0.70)',
+          borderColor: 'var(--mantine-color-dark-7)',
+          color: 'var(--mantine-color-dark-0)',
+        },
+        section: {
+          color: 'var(--mantine-color-dark-2)',
+        },
+      },
+    },
+    Select: {
+      styles: {
+        input: {
+          backgroundColor: 'rgba(33, 37, 41, 0.70)',
+          borderColor: 'var(--mantine-color-dark-7)',
+          color: 'var(--mantine-color-dark-0)',
+        },
+        dropdown: {
+          backgroundColor: 'var(--mantine-color-dark-8)',
+          borderColor: 'var(--mantine-color-dark-7)',
+        },
+        option: {
+          color: 'var(--mantine-color-dark-0)',
+        },
+      },
+    },
+    SegmentedControl: {
+      styles: {
+        root: {
+          backgroundColor: 'rgba(33, 37, 41, 0.65)',
+          border: '1px solid var(--mantine-color-dark-7)',
+        },
+        label: {
+          color: 'var(--mantine-color-dark-1)',
           fontWeight: 600,
+        },
+        controlActive: {
+          backgroundColor: 'rgba(30, 215, 96, 0.18)',
         },
       },
     },
@@ -99,7 +168,8 @@ const theme = createTheme({
         root: {
           borderRadius: '14px',
           border: '1px solid var(--mantine-color-dark-7)',
-          backgroundColor: 'rgba(33, 37, 41, 0.55)',
+          background:
+            'linear-gradient(180deg, rgba(33, 37, 41, 0.72) 0%, rgba(33, 37, 41, 0.50) 100%)',
         },
       },
     },

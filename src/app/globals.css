@@ -63,4 +63,28 @@
 
 html, body {
   background: var(--mantine-color-dark-9);
+  color: var(--mantine-color-dark-0);
+}
+
+/* Sidebar navigation: ensure hover/focus/active states are always visible */
+.mantine-NavLink-root {
+  color: var(--mantine-color-dark-0);
+  border-radius: 10px;
+}
+
+.mantine-NavLink-section {
+  color: var(--mantine-color-dark-1);
+}
+
+.mantine-NavLink-root:hover {
+  background-color: rgba(255, 255, 255, 0.06);
+}
+
+.mantine-NavLink-root[data-active] {
+  background-color: rgba(30, 215, 96, 0.22);
+}
+
+.mantine-NavLink-root:focus-visible {
+  outline: 2px solid rgba(30, 215, 96, 0.85);
+  outline-offset: 2px;
 }

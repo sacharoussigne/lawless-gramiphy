@@ -57,7 +57,6 @@ export default function SidebarNav({ onNavigate }: SidebarNavProps) {
               leftSection={<Icon size={18} stroke={1.6} />}
               active={isActive(href)}
               onClick={onNavigate}
-              variant="filled"
             />
           ))}
         </Stack>
@@ -75,7 +74,6 @@ export default function SidebarNav({ onNavigate }: SidebarNavProps) {
               leftSection={<IconUsers size={18} stroke={1.6} />}
               active={isActive(routes.admin.users)}
               onClick={onNavigate}
-              variant="filled"
             />
           </>
         )}
