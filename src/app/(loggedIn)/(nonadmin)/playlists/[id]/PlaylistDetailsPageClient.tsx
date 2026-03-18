@@ -4,14 +4,12 @@ import {
   Alert,
   Button,
   Card,
-  Container,
   Group,
   Stack,
   Text,
   Title,
   SimpleGrid,
   TextInput,
-  Divider,
   Image,
 } from '@mantine/core';
 import {
@@ -25,8 +23,6 @@ import {
 } from '@tabler/icons-react';
 import { useRouter } from 'next/navigation';
 import {
-  addCollaborator,
-  removeCollaborator,
   removeTrackFromPlaylist,
 } from '@/app/_actions/playlists';
 import { handleAction } from '@/lib/action';
@@ -34,6 +30,7 @@ import { notifications } from '@mantine/notifications';
 import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import { routes } from '@/types/routes';
+import CollaboratorsModal from './_components/CollaboratorsModal';
 
 type PlaylistTrack = {
   id: string;
@@ -83,9 +80,7 @@ export default function PlaylistDetailsPageClient({ playlist }: PlaylistDetailsP
   const [removingId, setRemovingId] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [copiedId, setCopiedId] = useState<string | null>(null);
-  const [collaboratorEmail, setCollaboratorEmail] = useState('');
-  const [savingCollaborator, setSavingCollaborator] = useState(false);
-  const [removingCollaboratorId, setRemovingCollaboratorId] = useState<string | null>(null);
+  const [collaboratorsModalOpen, setCollaboratorsModalOpen] = useState(false);
 
   const filteredTracks = useMemo(() => {
     if (!search.trim()) return playlist.tracks;
@@ -137,62 +132,8 @@ export default function PlaylistDetailsPageClient({ playlist }: PlaylistDetailsP
 
   const canManageCollaborators = playlist.isOwner || playlist.isAdminOrDj;
 
-  const handleAddCollaborator = async () => {
-    const email = collaboratorEmail.trim();
-    if (!email) return;
-    setSavingCollaborator(true);
-    setError(null);
-    try {
-      const result = await addCollaborator(playlist.id, email);
-      handleAction(result);
-      notifications.show({
-        title: 'Collaborateur ajouté',
-        message: 'Cet utilisateur peut maintenant gérer la playlist.',
-        color: 'green',
-      });
-      setCollaboratorEmail('');
-      router.refresh();
-    } catch (e: any) {
-      const message = e.message || 'Erreur inconnue';
-      setError(message);
-      notifications.show({
-        title: 'Erreur',
-        message,
-        color: 'red',
-      });
-    } finally {
-      setSavingCollaborator(false);
-    }
-  };
-
-  const handleRemoveCollaborator = async (userId: string) => {
-    setRemovingCollaboratorId(userId);
-    setError(null);
-    try {
-      const result = await removeCollaborator(playlist.id, userId);
-      handleAction(result);
-      notifications.show({
-        title: 'Collaborateur retiré',
-        message: 'Cet utilisateur ne peut plus gérer la playlist.',
-        color: 'green',
-      });
-      router.refresh();
-    } catch (e: any) {
-      const message = e.message || 'Erreur inconnue';
-      setError(message);
-      notifications.show({
-        title: 'Erreur',
-        message,
-        color: 'red',
-      });
-    } finally {
-      setRemovingCollaboratorId(null);
-    }
-  };
-
   return (
-    <Container size="xl" py="xl">
-      <Stack gap="xl">
+    <Stack gap="xl">
         <Group justify="space-between" align="flex-start">
           <Stack gap="xs">
             <Group gap="sm">
@@ -212,6 +153,15 @@ export default function PlaylistDetailsPageClient({ playlist }: PlaylistDetailsP
             </Group>
           </Stack>
           <Group gap="xs">
+            {canManageCollaborators && (
+              <Button
+                size="xs"
+                variant="default"
+                onClick={() => setCollaboratorsModalOpen(true)}
+              >
+                Gérer les collaborateurs
+              </Button>
+            )}
             <Button
               size="xs"
               variant="subtle"
@@ -239,7 +189,7 @@ export default function PlaylistDetailsPageClient({ playlist }: PlaylistDetailsP
           </Alert>
         )}
 
-        {(playlist.collaborators.length > 0 || canManageCollaborators) && (
+        {playlist.collaborators.length > 0 && (
           <Card withBorder radius="md" p="md">
             <Stack gap="sm">
               <Group justify="space-between" align="center">
@@ -249,62 +199,32 @@ export default function PlaylistDetailsPageClient({ playlist }: PlaylistDetailsP
                   {playlist.ownerEmail && ` (${playlist.ownerEmail})`}
                 </Text>
               </Group>
-              {playlist.collaborators.length === 0 ? (
-                <Text size="sm" c="dimmed">
-                  Aucun collaborateur pour le moment.
-                </Text>
-              ) : (
-                <Stack gap={4}>
-                  {playlist.collaborators.map((user) => (
-                    <Group key={user.id} justify="space-between">
-                      <div>
-                        <Text size="sm">{user.name ?? user.email ?? 'Utilisateur'}</Text>
-                        {user.email && (
-                          <Text size="xs" c="dimmed">
-                            {user.email}
-                          </Text>
-                        )}
-                      </div>
-                      {canManageCollaborators && (
-                        <Button
-                          size="xs"
-                          variant="subtle"
-                          color="red"
-                          loading={removingCollaboratorId === user.id}
-                          onClick={() => handleRemoveCollaborator(user.id)}
-                        >
-                          Retirer
-                        </Button>
+              <Stack gap={4}>
+                {playlist.collaborators.map((user) => (
+                  <Group key={user.id} justify="space-between">
+                    <div>
+                      <Text size="sm">{user.name ?? user.email ?? 'Utilisateur'}</Text>
+                      {user.email && (
+                        <Text size="xs" c="dimmed">
+                          {user.email}
+                        </Text>
                       )}
-                    </Group>
-                  ))}
-                </Stack>
-              )}
-
-              {canManageCollaborators && (
-                <>
-                  <Divider my="sm" />
-                  <Group align="flex-end" gap="sm">
-                    <TextInput
-                      label="Ajouter un collaborateur"
-                      placeholder="Email de l'utilisateur"
-                      value={collaboratorEmail}
-                      onChange={(event) => setCollaboratorEmail(event.currentTarget.value)}
-                      style={{ flex: 1 }}
-                    />
-                    <Button
-                      onClick={handleAddCollaborator}
-                      loading={savingCollaborator}
-                      disabled={!collaboratorEmail.trim()}
-                    >
-                      Ajouter
-                    </Button>
+                    </div>
                   </Group>
-                </>
-              )}
+                ))}
+              </Stack>
             </Stack>
           </Card>
         )}
+
+        <CollaboratorsModal
+          opened={collaboratorsModalOpen}
+          onClose={() => setCollaboratorsModalOpen(false)}
+          playlistId={playlist.id}
+          ownerLabel={`Propriétaire : ${playlist.ownerName ?? 'Inconnu'}${playlist.ownerEmail ? ` (${playlist.ownerEmail})` : ''}`}
+          collaborators={playlist.collaborators}
+          canManage={canManageCollaborators}
+        />
 
         <Stack gap="md">
           <TextInput
@@ -385,8 +305,7 @@ export default function PlaylistDetailsPageClient({ playlist }: PlaylistDetailsP
             </SimpleGrid>
           )}
         </Stack>
-      </Stack>
-    </Container>
+    </Stack>
   );
 }
 

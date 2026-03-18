@@ -3,7 +3,6 @@
 import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
-  Container,
   Stack,
   Card,
   TextInput,
@@ -257,8 +256,7 @@ export default function LibraryPageClient({ initialTracks }: LibraryPageClientPr
   };
 
   return (
-    <Container size="xl" py="xl">
-      <Stack gap="xl">
+    <Stack gap="xl">
         <Group justify="space-between" align="flex-start">
           <Stack gap={4}>
             <Group gap="sm">
@@ -505,8 +503,7 @@ export default function LibraryPageClient({ initialTracks }: LibraryPageClientPr
             )}
           </Stack>
         </Modal>
-      </Stack>
-    </Container>
+    </Stack>
   );
 }
 
