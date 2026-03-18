@@ -1,8 +1,7 @@
 import { getAuthSession } from '@/lib/auth';
-import { Container } from '@mantine/core';
-import Header from '../_components/Header/Header';
 import { PermissionsProvider } from '@/app/_contexts/PermissionsContext';
 import { calculatePermissions } from '@/lib/auth/calculatePermissions';
+import LoggedInShell from '@/app/(loggedIn)/_components/Shell/LoggedInShell';
 
 export default async function LanguageLayout({
   children,
@@ -17,11 +16,7 @@ export default async function LanguageLayout({
 
   return (
     <PermissionsProvider initialPermissions={permissions} initialRole={role}>
-      <Header session={session as any} />
-
-      <Container size={'xl'} className={'flex-1 pb-[72px] sm:pb-0'}>
-        {children}
-      </Container>
+      <LoggedInShell session={session as any}>{children}</LoggedInShell>
     </PermissionsProvider>
   );
 }

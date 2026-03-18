@@ -56,7 +56,12 @@ export default async function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        <MantineProvider theme={theme}>
+        <MantineProvider
+          theme={theme}
+          defaultColorScheme="dark"
+          withStaticClasses
+          withGlobalClasses
+        >
           <ModalsProvider>
             <Notifications position={'top-right'} />
             {children}

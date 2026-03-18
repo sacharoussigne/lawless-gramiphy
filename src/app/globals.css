@@ -61,4 +61,9 @@
   border-bottom-right-radius: var(--mantine-radius-md);
 }
 
-@import "tailwindcss";
+html, body {
+  background: var(--mantine-color-dark-9);
+  color: var(--mantine-color-dark-0);
+}
+
+/* Sidebar NavLink styles are handled via Mantine theme (components.NavLink) */

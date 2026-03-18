@@ -5,7 +5,6 @@ import {
   Alert,
   Button,
   Card,
-  Container,
   Group,
   Modal,
   Stack,
@@ -142,8 +141,7 @@ export default function PlaylistsPageClient({ initialPlaylists }: PlaylistsPageC
   };
 
   return (
-    <Container size="xl" py="xl">
-      <Stack gap="xl">
+    <Stack gap="xl">
         <Group justify="space-between" align="flex-start">
           <Stack gap={4}>
             <Group gap="sm">
@@ -297,8 +295,7 @@ export default function PlaylistsPageClient({ initialPlaylists }: PlaylistsPageC
             </Group>
           </Stack>
         </Modal>
-      </Stack>
-    </Container>
+    </Stack>
   );
 }
 
