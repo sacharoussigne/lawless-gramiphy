@@ -24,6 +24,7 @@ model User {
   tracks                Track[]
   playlists             Playlist[]
   playlistCollaborators PlaylistCollaborator[]
+  pinnedPlaylists       PinnedPlaylist[]
 
   @@unique([email])
   @@map("user")
@@ -102,15 +103,31 @@ model Playlist {
   id            String                 @id @default(cuid())
   name          String
   description   String?
+  image         String?
   ownerId       String
   owner         User                   @relation(fields: [ownerId], references: [id], onDelete: Cascade)
   tracks        PlaylistTrack[]
   collaborators PlaylistCollaborator[]
+  pinnedBy      PinnedPlaylist[]
   createdAt     DateTime               @default(now())
   updatedAt     DateTime               @updatedAt
 
   @@index([ownerId])
   @@map("playlists")
+}
+
+model PinnedPlaylist {
+  id         String   @id @default(cuid())
+  userId     String
+  playlistId String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  playlist   Playlist @relation(fields: [playlistId], references: [id], onDelete: Cascade)
+  createdAt  DateTime @default(now())
+
+  @@unique([userId, playlistId])
+  @@index([userId])
+  @@index([playlistId])
+  @@map("pinned_playlists")
 }
 
 model PlaylistTrack {

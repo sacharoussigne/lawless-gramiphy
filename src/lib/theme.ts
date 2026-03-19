@@ -89,21 +89,6 @@ const theme = createTheme({
           paddingInline: DEFAULT_THEME.spacing.sm,
           paddingBlock: 6,
           transition: 'background-color 160ms ease, transform 160ms ease, box-shadow 160ms ease',
-
-          '&[data-active]': {
-            backgroundColor: 'rgba(30, 215, 96, 0.45) !important',
-            boxShadow: 'inset 3px 0 0 rgba(30, 215, 96, 0.85)',
-            color: 'var(--mantine-color-dark-0) !important',
-          },
-
-          '&[data-hovered]': {
-            backgroundColor: 'rgba(30, 215, 96, 0.18) !important',
-          },
-
-          '&:focus-visible': {
-            outline: '2px solid rgba(30, 215, 96, 0.85)',
-            outlineOffset: 2,
-          },
         },
         label: {
           color: 'var(--mantine-color-dark-0)',

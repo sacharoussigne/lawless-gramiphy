@@ -12,24 +12,23 @@ type LoggedInShellProps = {
 };
 
 export default function LoggedInShell({ session, children }: LoggedInShellProps) {
-  const [opened, { toggle, close }] = useDisclosure();
+  const [collapsed, { toggle: toggleCollapsed }] = useDisclosure(false);
 
   return (
     <AppShell
       header={{ height: 60 }}
       navbar={{
-        width: 280,
+        width: collapsed ? 84 : 280,
         breakpoint: 'sm',
-        collapsed: { mobile: !opened },
       }}
       padding="md"
     >
       <AppShell.Header>
-        <TopBar session={session} opened={opened} toggle={toggle} />
+        <TopBar collapsed={collapsed} toggleCollapsed={toggleCollapsed} />
       </AppShell.Header>
 
       <AppShell.Navbar>
-        <SidebarNav onNavigate={close} />
+        <SidebarNav session={session} collapsed={collapsed} />
       </AppShell.Navbar>
 
       <AppShell.Main>

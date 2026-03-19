@@ -17,7 +17,8 @@ export default function useSingleAudioPlayer() {
 
   useEffect(() => {
     const audio = new Audio();
-    audio.preload = 'metadata';
+    // Prevent network fetch before user explicitly starts playback.
+    audio.preload = 'none';
     audio.volume = volume;
     audioRef.current = audio;
 
