@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   Alert,
   Avatar,
@@ -13,15 +13,18 @@ import {
   SegmentedControl,
   TextInput,
   Title,
+  ActionIcon,
+  Tooltip,
 } from '@mantine/core';
-import { IconAlertCircle, IconMusic, IconPlayerPlay } from '@tabler/icons-react';
+import { IconAlertCircle, IconMusic, IconPlayerPlay, IconPin, IconPinnedOff } from '@tabler/icons-react';
 import { useRouter } from 'next/navigation';
-import { createPlaylist, deletePlaylist } from '@/app/_actions/playlists';
+import { createPlaylist, deletePlaylist, togglePinnedPlaylist } from '@/app/_actions/playlists';
 import { handleAction } from '@/lib/action';
 import { notifications } from '@mantine/notifications';
 import Link from 'next/link';
 import { routes } from '@/types/routes';
 import PlaylistFormModal from './_components/PlaylistFormModal';
+import { PINNED_PLAYLISTS_UPDATED_EVENT } from '@/constants/events';
 
 type PlaylistScope = 'all' | 'mine' | 'shared';
 type PlaylistSort = 'date_desc' | 'date_asc' | 'name' | 'tracks';
@@ -38,6 +41,7 @@ type PlaylistSummary = {
   updatedAt: Date;
   canEdit: boolean;
   isCollaborator: boolean;
+  isPinned: boolean;
 };
 
 interface PlaylistsPageClientProps {
@@ -50,13 +54,18 @@ export default function PlaylistsPageClient({
   currentUserId,
 }: PlaylistsPageClientProps) {
   const router = useRouter();
-  const [playlists] = useState(initialPlaylists);
+  const [playlists, setPlaylists] = useState(initialPlaylists);
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [pinLoadingId, setPinLoadingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [scope, setScope] = useState<PlaylistScope>('all');
   const [sortBy, setSortBy] = useState<PlaylistSort>('date_desc');
+
+  useEffect(() => {
+    setPlaylists(initialPlaylists);
+  }, [initialPlaylists]);
 
   const filteredPlaylists = useMemo(() => {
     let list = [...playlists];
@@ -103,12 +112,15 @@ export default function PlaylistsPageClient({
     try {
       const result = await createPlaylist(values.name, values.description, values.image);
       handleAction(result);
+      const created = (result as any).data as PlaylistSummary | undefined;
+      if (created) {
+        setPlaylists((prev) => [created, ...prev]);
+      }
       notifications.show({
         title: 'Playlist créée',
         message: 'La playlist a été créée avec succès',
         color: 'green',
       });
-      router.refresh();
     } catch (e: any) {
       const message = e.message || 'Erreur inconnue';
       setError(message);
@@ -122,12 +134,12 @@ export default function PlaylistsPageClient({
     try {
       const result = await deletePlaylist(pl.id);
       handleAction(result);
+      setPlaylists((prev) => prev.filter((item) => item.id !== pl.id));
       notifications.show({
         title: 'Playlist supprimée',
         message: 'La playlist a été supprimée',
         color: 'green',
       });
-      router.refresh();
     } catch (e: any) {
       const message = e.message || 'Erreur inconnue';
       notifications.show({
@@ -137,6 +149,36 @@ export default function PlaylistsPageClient({
       });
     } finally {
       setDeletingId(null);
+    }
+  };
+
+  const handleTogglePin = async (pl: PlaylistSummary) => {
+    setPinLoadingId(pl.id);
+    try {
+      const result = await togglePinnedPlaylist(pl.id);
+      handleAction(result);
+      const pinned = (result as any).data?.pinned ?? false;
+      setPlaylists((prev) =>
+        prev.map((item) => (item.id === pl.id ? { ...item, isPinned: pinned } : item)),
+      );
+      notifications.show({
+        title: pinned ? 'Épinglée' : 'Désépinglée',
+        message: pinned
+          ? 'La playlist a été ajoutée à la sidebar.'
+          : 'La playlist a été retirée de la sidebar.',
+        color: pinned ? 'blue' : 'gray',
+      });
+      window.dispatchEvent(new CustomEvent(PINNED_PLAYLISTS_UPDATED_EVENT));
+      router.refresh();
+    } catch (e: any) {
+      const message = e.message || 'Erreur inconnue';
+      notifications.show({
+        title: 'Erreur',
+        message,
+        color: 'red',
+      });
+    } finally {
+      setPinLoadingId(null);
     }
   };
 
@@ -257,21 +299,38 @@ export default function PlaylistsPageClient({
                       </Text>
                     </Stack>
                   </Group>
-                  {pl.canEdit && (
-                    <Button
-                      size="xs"
-                      color="red"
-                      variant="light"
-                      loading={deletingId === pl.id}
-                      onClick={(event) => {
-                        event.preventDefault();
-                        event.stopPropagation();
-                        handleDelete(pl);
-                      }}
-                    >
-                      Supprimer
-                    </Button>
-                  )}
+                  <Group gap="xs" justify="flex-end">
+                    <Tooltip label={pl.isPinned ? 'Désépingler' : 'Épingler'} withArrow>
+                      <ActionIcon
+                        variant={pl.isPinned ? 'filled' : 'subtle'}
+                        color={pl.isPinned ? 'blue' : 'gray'}
+                        loading={pinLoadingId === pl.id}
+                        onClick={(event) => {
+                          event.preventDefault();
+                          event.stopPropagation();
+                          void handleTogglePin(pl);
+                        }}
+                        aria-label={pl.isPinned ? 'Désépingler la playlist' : 'Épingler la playlist'}
+                      >
+                        {pl.isPinned ? <IconPinnedOff size={16} stroke={1.8} /> : <IconPin size={16} stroke={1.8} />}
+                      </ActionIcon>
+                    </Tooltip>
+                    {pl.canEdit && (
+                      <Button
+                        size="xs"
+                        color="red"
+                        variant="light"
+                        loading={deletingId === pl.id}
+                        onClick={(event) => {
+                          event.preventDefault();
+                          event.stopPropagation();
+                          handleDelete(pl);
+                        }}
+                      >
+                        Supprimer
+                      </Button>
+                    )}
+                  </Group>
                 </Group>
               </Card>
             ))}

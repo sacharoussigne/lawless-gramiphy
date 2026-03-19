@@ -7,19 +7,19 @@ import Link from 'next/link';
 import { routes } from '@/types/routes';
 
 type TopBarProps = {
-  opened: boolean;
-  toggle: () => void;
+  collapsed: boolean;
+  toggleCollapsed: () => void;
 };
 
-export default function TopBar({ opened, toggle }: TopBarProps) {
+export default function TopBar({ collapsed, toggleCollapsed }: TopBarProps) {
   return (
     <Group h="100%" px="md" justify="space-between" wrap="nowrap">
       <Group gap="xs" wrap="nowrap">
         <ActionIcon
           variant="subtle"
           size="lg"
-          onClick={toggle}
-          aria-label={opened ? 'Fermer le menu' : 'Ouvrir le menu'}
+          onClick={toggleCollapsed}
+          aria-label={collapsed ? 'Développer la sidebar' : 'Réduire la sidebar'}
         >
           <IconMenu2 size={20} stroke={1.8} />
         </ActionIcon>

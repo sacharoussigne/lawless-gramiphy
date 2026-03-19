@@ -59,6 +59,7 @@ type PlaylistSummary = {
   updatedAt: Date;
   canEdit: boolean;
   isCollaborator: boolean;
+  isPinned: boolean;
 };
 
 type PlaylistWithTracks = {
@@ -74,6 +75,7 @@ type PlaylistWithTracks = {
   canEdit: boolean;
   isOwner: boolean;
   isAdminOrDj: boolean;
+  isPinned: boolean;
   collaborators: {
     id: string;
     name: string | null;
@@ -89,6 +91,13 @@ type PlaylistWithTracks = {
     position: number;
     uploaderName: string | null;
   }[];
+};
+
+type PinnedPlaylistSummary = {
+  playlistId: string;
+  name: string;
+  image: string | null;
+  createdAt: Date;
 };
 
 function canManageGramophone(role: string | null | undefined): boolean {
@@ -138,6 +147,10 @@ export async function getPlaylists(): Promise<ServerActionResponse<PlaylistSumma
             email: true,
           },
         },
+        pinnedBy: {
+          where: { userId },
+          select: { id: true },
+        },
         tracks: {
           select: { id: true },
         },
@@ -169,6 +182,7 @@ export async function getPlaylists(): Promise<ServerActionResponse<PlaylistSumma
         updatedAt: pl.updatedAt,
         canEdit: permissions.canEdit,
         isCollaborator: pl.collaborators.some((c) => c.userId === userId),
+        isPinned: pl.pinnedBy.length > 0,
       };
     });
 
@@ -212,6 +226,10 @@ export async function getManageablePlaylistsForTrack(
             email: true,
           },
         },
+        pinnedBy: {
+          where: { userId },
+          select: { id: true },
+        },
         tracks: {
           select: {
             id: true,
@@ -252,6 +270,7 @@ export async function getManageablePlaylistsForTrack(
         updatedAt: pl.updatedAt,
         canEdit: permissions.canEdit,
         isCollaborator: pl.collaborators.some((c) => c.userId === userId),
+        isPinned: pl.pinnedBy.length > 0,
       });
     }
 
@@ -295,6 +314,10 @@ export async function getPlaylist(id: string): Promise<ServerActionResponse<Play
             name: true,
             email: true,
           },
+        },
+        pinnedBy: {
+          where: { userId },
+          select: { id: true },
         },
         tracks: {
           orderBy: { position: 'asc' },
@@ -341,6 +364,7 @@ export async function getPlaylist(id: string): Promise<ServerActionResponse<Play
       canEdit: permissions.canEdit,
       isOwner: permissions.isOwner,
       isAdminOrDj: permissions.isAdminOrDj,
+      isPinned: pl.pinnedBy.length > 0,
       collaborators: pl.collaborators.map((c) => ({
         id: c.user.id,
         name: c.user.name,
@@ -367,6 +391,118 @@ export async function getPlaylist(id: string): Promise<ServerActionResponse<Play
         typeof parsed.error === 'string'
           ? parsed.error
           : 'Erreur lors de la récupération de la playlist',
+    };
+  }
+}
+
+export async function getPinnedPlaylists(): Promise<
+  ServerActionResponse<PinnedPlaylistSummary[]>
+> {
+  try {
+    const session = await getAuthSession();
+    if (!session) {
+      return { status: 401, error: 'Non autorisé' };
+    }
+
+    const role = session.user.role ?? null;
+    const userId = session.user.id;
+
+    const hasGramophoneAccess = checkRolePermission(role, 'gramophone', 'access');
+    if (!hasGramophoneAccess) {
+      return { status: 403, error: 'Accès refusé' };
+    }
+
+    const pins = await prisma.pinnedPlaylist.findMany({
+      where: { userId },
+      orderBy: { createdAt: 'desc' },
+      include: {
+        playlist: {
+          select: {
+            id: true,
+            name: true,
+            image: true,
+          },
+        },
+      },
+    });
+
+    return {
+      status: 200,
+      data: pins.map((p) => ({
+        playlistId: p.playlist.id,
+        name: p.playlist.name,
+        image: p.playlist.image,
+        createdAt: p.createdAt,
+      })),
+    };
+  } catch (error) {
+    const parsed = actionErrorParser(error, 'Erreur lors de la récupération des playlists épinglées');
+    return {
+      status: parsed.status as 400 | 401 | 403 | 404 | 422 | 500,
+      error:
+        typeof parsed.error === 'string'
+          ? parsed.error
+          : 'Erreur lors de la récupération des playlists épinglées',
+    };
+  }
+}
+
+export async function togglePinnedPlaylist(
+  playlistId: string,
+): Promise<ServerActionResponse<{ pinned: boolean }>> {
+  try {
+    const session = await getAuthSession();
+    if (!session) {
+      return { status: 401, error: 'Non autorisé' };
+    }
+
+    const role = session.user.role ?? null;
+    const userId = session.user.id;
+
+    const hasGramophoneAccess = checkRolePermission(role, 'gramophone', 'access');
+    if (!hasGramophoneAccess) {
+      return { status: 403, error: 'Accès refusé' };
+    }
+
+    const validated = z
+      .string()
+      .min(1, 'Playlist introuvable')
+      .parse(playlistId);
+
+    const playlistExists = await prisma.playlist.findUnique({
+      where: { id: validated },
+      select: { id: true },
+    });
+    if (!playlistExists) {
+      return { status: 404, error: 'Playlist introuvable' };
+    }
+
+    const existing = await prisma.pinnedPlaylist.findUnique({
+      where: { userId_playlistId: { userId, playlistId: validated } },
+      select: { id: true },
+    });
+
+    if (existing) {
+      await prisma.pinnedPlaylist.delete({
+        where: { id: existing.id },
+      });
+      return { status: 200, data: { pinned: false } };
+    }
+
+    await prisma.pinnedPlaylist.create({
+      data: {
+        userId,
+        playlistId: validated,
+      },
+    });
+
+    return { status: 200, data: { pinned: true } };
+  } catch (error) {
+    const parsed = actionErrorParser(error, "Erreur lors de la mise à jour de l'épinglage");
+    return {
+      status: parsed.status as 400 | 401 | 403 | 404 | 422 | 500,
+      error:
+        typeof parsed.error === 'string' ? parsed.error : "Erreur lors de la mise à jour de l'épinglage",
     };
   }
 }
@@ -422,6 +558,7 @@ export async function createPlaylist(
       updatedAt: playlist.updatedAt,
       canEdit: true,
       isCollaborator: false,
+      isPinned: false,
     };
 
     return { status: 200, data: summary };

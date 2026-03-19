@@ -10,16 +10,21 @@ import {
   Title,
   TextInput,
   Slider,
+  ActionIcon,
+  Tooltip,
 } from '@mantine/core';
 import {
   IconAlertCircle,
   IconMusic,
   IconPlayerPlay,
   IconPlaylist,
+  IconPin,
+  IconPinnedOff,
 } from '@tabler/icons-react';
 import { useRouter } from 'next/navigation';
 import {
   removeTrackFromPlaylist,
+  togglePinnedPlaylist,
   updatePlaylist,
 } from '@/app/_actions/playlists';
 import { handleAction } from '@/lib/action';
@@ -31,6 +36,7 @@ import CollaboratorsModal from './_components/CollaboratorsModal';
 import TrackRow from '../../../_components/Tracks/TrackRow';
 import useSingleAudioPlayer from '../../../_components/Tracks/useSingleAudioPlayer';
 import PlaylistFormModal from '../_components/PlaylistFormModal';
+import { PINNED_PLAYLISTS_UPDATED_EVENT } from '@/constants/events';
 
 type PlaylistTrack = {
   id: string;
@@ -56,6 +62,7 @@ type PlaylistWithTracks = {
   canEdit: boolean;
   isOwner: boolean;
   isAdminOrDj: boolean;
+  isPinned: boolean;
   collaborators: {
     id: string;
     name: string | null;
@@ -77,6 +84,7 @@ export default function PlaylistDetailsPageClient({ playlist }: PlaylistDetailsP
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [collaboratorsModalOpen, setCollaboratorsModalOpen] = useState(false);
   const [editModalOpen, setEditModalOpen] = useState(false);
+  const [pinLoading, setPinLoading] = useState(false);
 
   const filteredTracks = useMemo(() => {
     if (!search.trim()) return playlist.tracks;
@@ -123,6 +131,33 @@ export default function PlaylistDetailsPageClient({ playlist }: PlaylistDetailsP
       });
     } finally {
       setRemovingId(null);
+    }
+  };
+
+  const handleTogglePin = async () => {
+    setPinLoading(true);
+    try {
+      const result = await togglePinnedPlaylist(playlist.id);
+      handleAction(result);
+      const pinned = (result as any).data?.pinned ?? false;
+      notifications.show({
+        title: pinned ? 'Épinglée' : 'Désépinglée',
+        message: pinned
+          ? 'La playlist a été ajoutée à la sidebar.'
+          : 'La playlist a été retirée de la sidebar.',
+        color: pinned ? 'blue' : 'gray',
+      });
+      window.dispatchEvent(new CustomEvent(PINNED_PLAYLISTS_UPDATED_EVENT));
+      router.refresh();
+    } catch (e: any) {
+      const message = e.message || 'Erreur inconnue';
+      notifications.show({
+        title: 'Erreur',
+        message,
+        color: 'red',
+      });
+    } finally {
+      setPinLoading(false);
     }
   };
 
@@ -179,6 +214,22 @@ export default function PlaylistDetailsPageClient({ playlist }: PlaylistDetailsP
           </Group>
         </Stack>
         <Group gap="xs">
+          <Tooltip label={playlist.isPinned ? 'Désépingler' : 'Épingler'} withArrow>
+            <ActionIcon
+              size="lg"
+              variant={playlist.isPinned ? 'filled' : 'subtle'}
+              color={playlist.isPinned ? 'blue' : 'gray'}
+              loading={pinLoading}
+              onClick={() => void handleTogglePin()}
+              aria-label={playlist.isPinned ? 'Désépingler la playlist' : 'Épingler la playlist'}
+            >
+              {playlist.isPinned ? (
+                <IconPinnedOff size={18} stroke={1.8} />
+              ) : (
+                <IconPin size={18} stroke={1.8} />
+              )}
+            </ActionIcon>
+          </Tooltip>
           {canEditMetadata && (
             <Button size="xs" variant="default" onClick={() => setEditModalOpen(true)}>
               Modifier la playlist
