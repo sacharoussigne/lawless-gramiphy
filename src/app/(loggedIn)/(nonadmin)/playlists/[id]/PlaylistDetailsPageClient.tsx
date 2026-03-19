@@ -126,111 +126,84 @@ export default function PlaylistDetailsPageClient({ playlist }: PlaylistDetailsP
 
   return (
     <Stack gap="xl">
-        <Group justify="space-between" align="flex-start">
-          <Stack gap="xs">
-            <Group gap="sm">
-              <IconMusic size={40} stroke={1.5} />
-              <div>
-                <Title order={1}>{playlist.name}</Title>
-                {playlist.description && (
-                  <Text c="dimmed" size="sm">
-                    {playlist.description}
-                  </Text>
-                )}
-                <Text c="dimmed" size="xs">
-                  Créée par {playlist.ownerName ?? 'Inconnu'} · {playlist.tracks.length} piste
-                  {playlist.tracks.length > 1 ? 's' : ''}
+      <Group justify="space-between" align="flex-start">
+        <Stack gap="xs">
+          <Group gap="sm">
+            <IconMusic size={40} stroke={1.5} />
+            <div>
+              <Title order={1}>{playlist.name}</Title>
+              {playlist.description && (
+                <Text c="dimmed" size="sm">
+                  {playlist.description}
                 </Text>
-              </div>
-            </Group>
-          </Stack>
-          <Group gap="xs">
-            {canManageCollaborators && (
-              <Button
-                size="xs"
-                variant="default"
-                onClick={() => setCollaboratorsModalOpen(true)}
-              >
-                Gérer les collaborateurs
-              </Button>
-            )}
-            <Button
-              size="xs"
-              variant="subtle"
-              leftSection={<IconPlaylist size={14} />}
-              component={Link}
-              href={routes.playlists.index}
-            >
-              Toutes les playlists
-            </Button>
-            <Button
-              size="xs"
-              variant="subtle"
-              leftSection={<IconPlayerPlay size={14} />}
-              component={Link}
-              href={routes.library.index}
-            >
-              Bibliothèque
-            </Button>
+              )}
+              <Text c="dimmed" size="xs">
+                Créée par {playlist.ownerName ?? 'Inconnu'} · {playlist.tracks.length} piste
+                {playlist.tracks.length > 1 ? 's' : ''}
+              </Text>
+            </div>
           </Group>
+        </Stack>
+        <Group gap="xs">
+          {canManageCollaborators && (
+            <Button
+              size="xs"
+              variant="default"
+              onClick={() => setCollaboratorsModalOpen(true)}
+            >
+              Gérer les collaborateurs
+            </Button>
+          )}
+          <Button
+            size="xs"
+            variant="subtle"
+            leftSection={<IconPlaylist size={14} />}
+            component={Link}
+            href={routes.playlists.index}
+          >
+            Toutes les playlists
+          </Button>
+          <Button
+            size="xs"
+            variant="subtle"
+            leftSection={<IconPlayerPlay size={14} />}
+            component={Link}
+            href={routes.library.index}
+          >
+            Bibliothèque
+          </Button>
         </Group>
+      </Group>
 
-        {error && (
-          <Alert icon={<IconAlertCircle size={16} />} color="red">
-            {error}
-          </Alert>
-        )}
+      {error && (
+        <Alert icon={<IconAlertCircle size={16} />} color="red">
+          {error}
+        </Alert>
+      )}
 
-        {playlist.collaborators.length > 0 && (
-          <Card withBorder radius="md" p="md">
-            <Stack gap="sm">
-              <Group justify="space-between" align="center">
-                <Text fw={500}>Collaborateurs</Text>
-                <Text size="xs" c="dimmed">
-                  Propriétaire : {playlist.ownerName ?? 'Inconnu'}
-                  {playlist.ownerEmail && ` (${playlist.ownerEmail})`}
-                </Text>
-              </Group>
-              <Stack gap={4}>
-                {playlist.collaborators.map((user) => (
-                  <Group key={user.id} justify="space-between">
-                    <div>
-                      <Text size="sm">{user.name ?? user.email ?? 'Utilisateur'}</Text>
-                      {user.email && (
-                        <Text size="xs" c="dimmed">
-                          {user.email}
-                        </Text>
-                      )}
-                    </div>
-                  </Group>
-                ))}
-              </Stack>
-            </Stack>
-          </Card>
-        )}
+      <CollaboratorsModal
+        opened={collaboratorsModalOpen}
+        onClose={() => setCollaboratorsModalOpen(false)}
+        playlistId={playlist.id}
+        ownerLabel={`Propriétaire : ${playlist.ownerName ?? 'Inconnu'}${playlist.ownerEmail ? ` (${playlist.ownerEmail})` : ''}`}
+        collaborators={playlist.collaborators}
+        canManage={canManageCollaborators}
+      />
 
-        <CollaboratorsModal
-          opened={collaboratorsModalOpen}
-          onClose={() => setCollaboratorsModalOpen(false)}
-          playlistId={playlist.id}
-          ownerLabel={`Propriétaire : ${playlist.ownerName ?? 'Inconnu'}${playlist.ownerEmail ? ` (${playlist.ownerEmail})` : ''}`}
-          collaborators={playlist.collaborators}
-          canManage={canManageCollaborators}
-        />
-
-        <Stack gap="md">
+      <Stack gap="md">
+        <Group justify="space-between" align="center" wrap="nowrap" gap="xl">
           <TextInput
             placeholder="Rechercher (titre, artiste, uploader)"
             value={search}
             onChange={(event: React.ChangeEvent<HTMLInputElement>) => setSearch(event.currentTarget.value)}
             size="sm"
+            style={{ flex: 1, minWidth: 220, }}
           />
-
-          <Group justify="space-between" align="center" wrap="nowrap" gap="md">
+          <Group gap="xs" align="center" style={{ minWidth: 240 }}>
             <Text size="xs" c="dimmed">
               Volume
             </Text>
-            <div style={{ flex: 1, minWidth: 160 }}>
+            <div style={{ flex: 1, minWidth: 120 }}>
               <Slider
                 value={Math.round((audioPlayer.volume ?? 1) * 100)}
                 min={0}
@@ -241,33 +214,36 @@ export default function PlaylistDetailsPageClient({ playlist }: PlaylistDetailsP
               />
             </div>
           </Group>
+        </Group>
+      </Stack>
 
-          {filteredTracks.length === 0 ? (
-            <Text c="dimmed" ta="center" py="xl">
-              Aucune musique ne correspond à la recherche.
-            </Text>
-          ) : (
-            <Stack gap="sm">
-              {filteredTracks.map((track) => (
-                <TrackRow
-                  key={track.id}
-                  track={{ ...track, canDelete: playlist.canEdit }}
-                  trackHref={`/tracks/${track.id}`}
-                  currentTrackId={audioPlayer.currentTrackId}
-                  isPlaying={audioPlayer.isPlaying}
-                  progressRatio={audioPlayer.progressRatio}
-                  onTogglePlay={(args) => audioPlayer.togglePlay(args)}
-                  onCopy={handleCopy}
-                  copiedTrackId={copiedId}
-                  onDeleteTrack={(t) => void handleRemove(t as any)}
-                  deleting={removingId === track.id}
-                  showAddToPlaylist={false}
-                  removeActionLabel="Retirer"
-                />
-              ))}
-            </Stack>
-          )}
-        </Stack>
+      <Stack gap="md">
+        {filteredTracks.length === 0 ? (
+          <Text c="dimmed" ta="center" py="xl">
+            Aucune musique ne correspond à la recherche.
+          </Text>
+        ) : (
+          <Stack gap="sm">
+            {filteredTracks.map((track) => (
+              <TrackRow
+                key={track.id}
+                track={{ ...track, canDelete: playlist.canEdit }}
+                trackHref={`/tracks/${track.id}`}
+                currentTrackId={audioPlayer.currentTrackId}
+                isPlaying={audioPlayer.isPlaying}
+                progressRatio={audioPlayer.progressRatio}
+                onTogglePlay={(args) => audioPlayer.togglePlay(args)}
+                onCopy={handleCopy}
+                copiedTrackId={copiedId}
+                onDeleteTrack={(t) => void handleRemove(t as any)}
+                deleting={removingId === track.id}
+                showAddToPlaylist={false}
+                removeActionLabel="Retirer"
+              />
+            ))}
+          </Stack>
+        )}
+      </Stack>
     </Stack>
   );
 }
