@@ -189,15 +189,16 @@ export default function PlaylistsPageClient({
                 {filteredPlaylists.length} playlist{filteredPlaylists.length > 1 ? 's' : ''}
               </Text>
             </Group>
-            <Group gap="sm" grow>
+            <Group gap="sm">
               <TextInput
                 placeholder="Rechercher (nom ou propriétaire)"
                 value={search}
                 onChange={(event) => setSearch(event.currentTarget.value)}
                 size="sm"
+                style={{ flex: 1, minWidth: 220 }}
               />
               <SegmentedControl
-                size="sm"
+                style={{ flex: 1, minWidth: 200 }}
                 value={scope}
                 onChange={(value) => setScope(value as PlaylistScope)}
                 data={[
@@ -207,7 +208,7 @@ export default function PlaylistsPageClient({
                 ]}
               />
               <Select
-                size="sm"
+                style={{ maxWidth: 160 }}
                 value={sortBy}
                 onChange={(value) => setSortBy((value as PlaylistSort) ?? 'date_desc')}
                 data={[
