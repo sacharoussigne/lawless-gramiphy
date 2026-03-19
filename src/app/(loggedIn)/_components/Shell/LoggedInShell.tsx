@@ -25,11 +25,11 @@ export default function LoggedInShell({ session, children }: LoggedInShellProps)
       padding="md"
     >
       <AppShell.Header>
-        <TopBar session={session} opened={opened} toggle={toggle} />
+        <TopBar opened={opened} toggle={toggle} />
       </AppShell.Header>
 
       <AppShell.Navbar>
-        <SidebarNav onNavigate={close} />
+        <SidebarNav session={session} onNavigate={close} />
       </AppShell.Navbar>
 
       <AppShell.Main>

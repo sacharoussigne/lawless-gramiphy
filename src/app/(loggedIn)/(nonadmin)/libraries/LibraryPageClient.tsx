@@ -412,36 +412,38 @@ export default function LibraryPageClient({ initialTracks }: LibraryPageClientPr
           </Group>
 
           <Card withBorder radius="md" p="sm">
-            <Group gap="sm" align="flex-end" justify="space-between" wrap="wrap">
+            <Group gap="sm" align="flex-end" wrap="wrap">
               <TextInput
-                placeholder="Rechercher (titre, artiste, uploader)"
+                placeholder="Rechercher (titre, artiste, ajouté par)"
                 value={search}
                 onChange={(e) => setSearch(e.currentTarget.value)}
                 size="sm"
-                style={{ flex: 1, minWidth: 220, maxWidth: 420 }}
+                style={{ flex: 1, minWidth: 220 }}
               />
-              <Select
-                placeholder="Uploader"
-                data={uploaders}
-                value={uploaderFilter}
-                onChange={setUploaderFilter}
-                clearable
-                size="sm"
-                style={{ width: 200 }}
-              />
-              <Select
-                placeholder="Tri"
-                value={sortBy}
-                onChange={(value) => setSortBy((value as any) ?? 'date_desc')}
-                data={[
-                  { value: 'date_desc', label: 'Plus récentes' },
-                  { value: 'date_asc', label: 'Plus anciennes' },
-                  { value: 'title', label: 'Titre' },
-                  { value: 'artist', label: 'Artiste' },
-                ]}
-                size="sm"
-                style={{ width: 200 }}
-              />
+              <Group gap="sm" align="flex-end" wrap="wrap" style={{ marginLeft: 'auto' }}>
+                <Select
+                  placeholder="Ajouté par"
+                  data={uploaders}
+                  value={uploaderFilter}
+                  onChange={setUploaderFilter}
+                  clearable
+                  size="sm"
+                  style={{ width: 200 }}
+                />
+                <Select
+                  placeholder="Tri"
+                  value={sortBy}
+                  onChange={(value) => setSortBy((value as any) ?? 'date_desc')}
+                  data={[
+                    { value: 'date_desc', label: 'Plus récentes' },
+                    { value: 'date_asc', label: 'Plus anciennes' },
+                    { value: 'title', label: 'Titre' },
+                    { value: 'artist', label: 'Artiste' },
+                  ]}
+                  size="sm"
+                  style={{ width: 200 }}
+                />
+              </Group>
             </Group>
           </Card>
 

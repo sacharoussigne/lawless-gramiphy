@@ -22,7 +22,7 @@ import { notifications } from '@mantine/notifications';
 import Link from 'next/link';
 import { routes } from '@/types/routes';
 
-type PlaylistScope = 'all' | 'mine';
+type PlaylistScope = 'all' | 'mine' | 'shared';
 type PlaylistSort = 'date_desc' | 'date_asc' | 'name' | 'tracks';
 
 type PlaylistSummary = {
@@ -35,13 +35,18 @@ type PlaylistSummary = {
   createdAt: Date;
   updatedAt: Date;
   canEdit: boolean;
+  isCollaborator: boolean;
 };
 
 interface PlaylistsPageClientProps {
   initialPlaylists: PlaylistSummary[];
+  currentUserId: string | null;
 }
 
-export default function PlaylistsPageClient({ initialPlaylists }: PlaylistsPageClientProps) {
+export default function PlaylistsPageClient({
+  initialPlaylists,
+  currentUserId,
+}: PlaylistsPageClientProps) {
   const router = useRouter();
   const [playlists] = useState(initialPlaylists);
   const [createModalOpen, setCreateModalOpen] = useState(false);
@@ -58,7 +63,11 @@ export default function PlaylistsPageClient({ initialPlaylists }: PlaylistsPageC
     let list = [...playlists];
 
     if (scope === 'mine') {
-      list = list.filter((pl) => pl.canEdit);
+      list = list.filter((pl) => pl.ownerId === currentUserId);
+    }
+
+    if (scope === 'shared') {
+      list = list.filter((pl) => pl.isCollaborator && pl.ownerId !== currentUserId);
     }
 
     if (search.trim()) {
@@ -71,21 +80,24 @@ export default function PlaylistsPageClient({ initialPlaylists }: PlaylistsPageC
     }
 
     list.sort((a, b) => {
+      const byName = a.name.localeCompare(b.name, 'fr', { sensitivity: 'base' });
+      const byCreatedAt = new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+      const byCreatedAtDesc = -byCreatedAt;
       switch (sortBy) {
         case 'name':
-          return a.name.localeCompare(b.name);
+          return byName || byCreatedAtDesc;
         case 'tracks':
-          return b.tracksCount - a.tracksCount;
+          return b.tracksCount - a.tracksCount || byName || byCreatedAtDesc;
         case 'date_asc':
-          return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+          return byCreatedAt || byName;
         case 'date_desc':
         default:
-          return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+          return byCreatedAtDesc || byName;
       }
     });
 
     return list;
-  }, [playlists, scope, search, sortBy]);
+  }, [playlists, currentUserId, scope, search, sortBy]);
 
   const handleCreate = async () => {
     if (!newName.trim()) return;
@@ -191,6 +203,7 @@ export default function PlaylistsPageClient({ initialPlaylists }: PlaylistsPageC
                 data={[
                   { label: 'Toutes', value: 'all' },
                   { label: 'Mes playlists', value: 'mine' },
+                  { label: 'Partagées', value: 'shared' },
                 ]}
               />
               <Select

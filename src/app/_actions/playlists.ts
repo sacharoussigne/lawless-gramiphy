@@ -16,6 +16,7 @@ type PlaylistSummary = {
   createdAt: Date;
   updatedAt: Date;
   canEdit: boolean;
+  isCollaborator: boolean;
 };
 
 type PlaylistWithTracks = {
@@ -123,6 +124,7 @@ export async function getPlaylists(): Promise<ServerActionResponse<PlaylistSumma
         createdAt: pl.createdAt,
         updatedAt: pl.updatedAt,
         canEdit: permissions.canEdit,
+        isCollaborator: pl.collaborators.some((c) => c.userId === userId),
       };
     });
 
@@ -204,6 +206,7 @@ export async function getManageablePlaylistsForTrack(
         createdAt: pl.createdAt,
         updatedAt: pl.updatedAt,
         canEdit: permissions.canEdit,
+        isCollaborator: pl.collaborators.some((c) => c.userId === userId),
       });
     }
 
@@ -370,6 +373,7 @@ export async function createPlaylist(
       createdAt: playlist.createdAt,
       updatedAt: playlist.updatedAt,
       canEdit: true,
+      isCollaborator: false,
     };
 
     return { status: 200, data: summary };
