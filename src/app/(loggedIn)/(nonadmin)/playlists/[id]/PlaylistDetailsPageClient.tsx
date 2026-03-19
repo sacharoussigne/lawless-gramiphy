@@ -15,6 +15,8 @@ import {
 } from '@mantine/core';
 import {
   IconAlertCircle,
+  IconCheck,
+  IconCopy,
   IconMusic,
   IconPlayerPlay,
   IconPlaylist,
@@ -82,6 +84,7 @@ export default function PlaylistDetailsPageClient({ playlist }: PlaylistDetailsP
   const [removingId, setRemovingId] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [copiedMixUrl, setCopiedMixUrl] = useState(false);
   const [collaboratorsModalOpen, setCollaboratorsModalOpen] = useState(false);
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [pinLoading, setPinLoading] = useState(false);
@@ -104,6 +107,18 @@ export default function PlaylistDetailsPageClient({ playlist }: PlaylistDetailsP
     notifications.show({
       title: 'Copié',
       message: 'Lien copié dans le presse-papiers',
+      color: 'blue',
+    });
+  };
+
+  const handleCopyMixUrl = () => {
+    const mixUrl = `${window.location.origin}/api/mixes/playlist?playlistId=${playlist.id}`;
+    navigator.clipboard.writeText(mixUrl);
+    setCopiedMixUrl(true);
+    setTimeout(() => setCopiedMixUrl(false), 2000);
+    notifications.show({
+      title: 'Copié',
+      message: 'Lien mix copié dans le presse-papiers',
       color: 'blue',
     });
   };
@@ -214,6 +229,15 @@ export default function PlaylistDetailsPageClient({ playlist }: PlaylistDetailsP
           </Group>
         </Stack>
         <Group gap="xs">
+          <Button
+            size="xs"
+            variant="subtle"
+            color={copiedMixUrl ? 'green' : undefined}
+            leftSection={copiedMixUrl ? <IconCheck size={14} /> : <IconCopy size={14} />}
+            onClick={handleCopyMixUrl}
+          >
+            {copiedMixUrl ? 'Mix copié' : 'Copier mix playlist'}
+          </Button>
           <Tooltip label={playlist.isPinned ? 'Désépingler' : 'Épingler'} withArrow>
             <ActionIcon
               size="lg"
