@@ -84,7 +84,7 @@ export default function PlaylistDetailsPageClient({ playlist }: PlaylistDetailsP
   const [removingId, setRemovingId] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [copiedId, setCopiedId] = useState<string | null>(null);
-  const [copiedMixUrl, setCopiedMixUrl] = useState(false);
+  const [copiedMixMode, setCopiedMixMode] = useState<'game' | 'stream' | null>(null);
   const [collaboratorsModalOpen, setCollaboratorsModalOpen] = useState(false);
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [pinLoading, setPinLoading] = useState(false);
@@ -111,14 +111,26 @@ export default function PlaylistDetailsPageClient({ playlist }: PlaylistDetailsP
     });
   };
 
-  const handleCopyMixUrl = () => {
-    const mixUrl = `${window.location.origin}/api/mixes/playlist?playlistId=${playlist.id}`;
+  const handleCopyMixGameUrl = () => {
+    const mixUrl = `${window.location.origin}/api/mixes/playlist/${playlist.id}/mix.mp3`;
     navigator.clipboard.writeText(mixUrl);
-    setCopiedMixUrl(true);
-    setTimeout(() => setCopiedMixUrl(false), 2000);
+    setCopiedMixMode('game');
+    setTimeout(() => setCopiedMixMode(null), 2000);
     notifications.show({
       title: 'Copié',
-      message: 'Lien mix copié dans le presse-papiers',
+      message: 'Lien mix (.mp3, Content-Length) pour le jeu',
+      color: 'blue',
+    });
+  };
+
+  const handleCopyMixStreamUrl = () => {
+    const mixUrl = `${window.location.origin}/api/mixes/playlist?playlistId=${encodeURIComponent(playlist.id)}`;
+    navigator.clipboard.writeText(mixUrl);
+    setCopiedMixMode('stream');
+    setTimeout(() => setCopiedMixMode(null), 2000);
+    notifications.show({
+      title: 'Copié',
+      message: 'Lien mix streaming (navigateur)',
       color: 'blue',
     });
   };
@@ -232,11 +244,20 @@ export default function PlaylistDetailsPageClient({ playlist }: PlaylistDetailsP
           <Button
             size="xs"
             variant="subtle"
-            color={copiedMixUrl ? 'green' : undefined}
-            leftSection={copiedMixUrl ? <IconCheck size={14} /> : <IconCopy size={14} />}
-            onClick={handleCopyMixUrl}
+            color={copiedMixMode === 'game' ? 'green' : undefined}
+            leftSection={copiedMixMode === 'game' ? <IconCheck size={14} /> : <IconCopy size={14} />}
+            onClick={handleCopyMixGameUrl}
           >
-            {copiedMixUrl ? 'Mix copié' : 'Copier mix playlist'}
+            {copiedMixMode === 'game' ? 'Lien jeu copié' : 'Copier mix (jeu)'}
+          </Button>
+          <Button
+            size="xs"
+            variant="subtle"
+            color={copiedMixMode === 'stream' ? 'green' : undefined}
+            leftSection={copiedMixMode === 'stream' ? <IconCheck size={14} /> : <IconCopy size={14} />}
+            onClick={handleCopyMixStreamUrl}
+          >
+            {copiedMixMode === 'stream' ? 'Lien stream copié' : 'Copier mix (navigateur)'}
           </Button>
           <Tooltip label={playlist.isPinned ? 'Désépingler' : 'Épingler'} withArrow>
             <ActionIcon

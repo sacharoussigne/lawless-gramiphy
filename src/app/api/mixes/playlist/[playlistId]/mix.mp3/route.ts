@@ -1,21 +1,11 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
-import { z } from 'zod';
 import { exec } from 'child_process';
 import { promisify } from 'util';
 
-import {
-  bufferFfmpegMixToUint8Array,
-  createFfmpegMixReadableStream,
-  loadPlaylistMixSources,
-  spawnFfmpegMix,
-} from '@/lib/mixes/playlistMixFfmpeg';
+import { bufferFfmpegMixToUint8Array, loadPlaylistMixSources } from '@/lib/mixes/playlistMixFfmpeg';
 
 const execAsync = promisify(exec);
-
-const querySchema = z.object({
-  playlistId: z.string().min(1, 'playlistId manquant'),
-});
 
 function formatErrorMessage(error: unknown): string {
   if (error instanceof Error && error.message.trim().length > 0) return error.message;
@@ -50,13 +40,13 @@ function parseMaxBufferBytes(): number {
   return Number.isFinite(n) && n > 0 ? n : 512 * 1024 * 1024;
 }
 
-export async function GET(request: NextRequest) {
+export async function GET(
+  request: NextRequest,
+  { params }: { params: Promise<{ playlistId: string }> },
+) {
   try {
-    const validated = querySchema.parse({
-      playlistId: request.nextUrl.searchParams.get('playlistId'),
-    });
-
-    const loaded = await loadPlaylistMixSources(validated.playlistId);
+    const { playlistId } = await params;
+    const loaded = await loadPlaylistMixSources(playlistId);
     if (!loaded.ok) {
       return NextResponse.json(loaded.body, { status: loaded.status });
     }
@@ -72,33 +62,16 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const bufferMode = request.nextUrl.searchParams.get('buffer') === '1';
+    const body = await bufferFfmpegMixToUint8Array(ffmpegCommand, loaded.sources, {
+      maxBytes: parseMaxBufferBytes(),
+      signal: request.signal,
+    });
 
-    if (bufferMode) {
-      const body = await bufferFfmpegMixToUint8Array(ffmpegCommand, loaded.sources, {
-        maxBytes: parseMaxBufferBytes(),
-        signal: request.signal,
-      });
-
-      return new Response(body as any, {
-        status: 200,
-        headers: {
-          'Content-Type': 'audio/mpeg',
-          'Content-Length': String(body.byteLength),
-          'Accept-Ranges': 'none',
-          'Cache-Control': 'no-store',
-          'Content-Disposition': `inline; filename="playlist-${loaded.playlistId}.mp3"`,
-        },
-      });
-    }
-
-    const ffmpeg = spawnFfmpegMix(ffmpegCommand, loaded.sources);
-    const stream = createFfmpegMixReadableStream(ffmpeg, request.signal);
-
-    return new Response(stream, {
+    return new Response(body as any, {
       status: 200,
       headers: {
         'Content-Type': 'audio/mpeg',
+        'Content-Length': String(body.byteLength),
         'Accept-Ranges': 'none',
         'Cache-Control': 'no-store',
         'Content-Disposition': `inline; filename="playlist-${loaded.playlistId}.mp3"`,
