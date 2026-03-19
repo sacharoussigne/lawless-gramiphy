@@ -2,8 +2,8 @@
 
 import {
   Alert,
+  Avatar,
   Button,
-  Card,
   Group,
   Stack,
   Text,
@@ -20,6 +20,7 @@ import {
 import { useRouter } from 'next/navigation';
 import {
   removeTrackFromPlaylist,
+  updatePlaylist,
 } from '@/app/_actions/playlists';
 import { handleAction } from '@/lib/action';
 import { notifications } from '@mantine/notifications';
@@ -29,6 +30,7 @@ import { routes } from '@/types/routes';
 import CollaboratorsModal from './_components/CollaboratorsModal';
 import TrackRow from '../../../_components/Tracks/TrackRow';
 import useSingleAudioPlayer from '../../../_components/Tracks/useSingleAudioPlayer';
+import PlaylistFormModal from '../_components/PlaylistFormModal';
 
 type PlaylistTrack = {
   id: string;
@@ -45,6 +47,7 @@ type PlaylistWithTracks = {
   id: string;
   name: string;
   description: string | null;
+  image: string | null;
   ownerId: string;
   ownerName: string | null;
   ownerEmail?: string | null;
@@ -73,6 +76,7 @@ export default function PlaylistDetailsPageClient({ playlist }: PlaylistDetailsP
   const [search, setSearch] = useState('');
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [collaboratorsModalOpen, setCollaboratorsModalOpen] = useState(false);
+  const [editModalOpen, setEditModalOpen] = useState(false);
 
   const filteredTracks = useMemo(() => {
     if (!search.trim()) return playlist.tracks;
@@ -123,13 +127,43 @@ export default function PlaylistDetailsPageClient({ playlist }: PlaylistDetailsP
   };
 
   const canManageCollaborators = playlist.isOwner || playlist.isAdminOrDj;
+  const canEditMetadata = playlist.isOwner || playlist.isAdminOrDj;
+
+  const handleUpdatePlaylist = async (values: {
+    name: string;
+    description?: string;
+    image?: string | null;
+  }) => {
+    setError(null);
+    try {
+      const result = await updatePlaylist({
+        id: playlist.id,
+        name: values.name,
+        description: values.description,
+        image: values.image,
+      });
+      handleAction(result);
+      notifications.show({
+        title: 'Playlist mise à jour',
+        message: 'Les informations de la playlist ont été modifiées',
+        color: 'green',
+      });
+      router.refresh();
+    } catch (e: any) {
+      const message = e.message || 'Erreur inconnue';
+      setError(message);
+      throw e;
+    }
+  };
 
   return (
     <Stack gap="xl">
       <Group justify="space-between" align="flex-start">
         <Stack gap="xs">
           <Group gap="sm">
-            <IconMusic size={40} stroke={1.5} />
+            <Avatar src={playlist.image} radius="md" size={72}>
+              <IconMusic size={28} stroke={1.5} />
+            </Avatar>
             <div>
               <Title order={1}>{playlist.name}</Title>
               {playlist.description && (
@@ -145,6 +179,11 @@ export default function PlaylistDetailsPageClient({ playlist }: PlaylistDetailsP
           </Group>
         </Stack>
         <Group gap="xs">
+          {canEditMetadata && (
+            <Button size="xs" variant="default" onClick={() => setEditModalOpen(true)}>
+              Modifier la playlist
+            </Button>
+          )}
           {canManageCollaborators && (
             <Button
               size="xs"
@@ -188,6 +227,19 @@ export default function PlaylistDetailsPageClient({ playlist }: PlaylistDetailsP
         ownerLabel={`Propriétaire : ${playlist.ownerName ?? 'Inconnu'}${playlist.ownerEmail ? ` (${playlist.ownerEmail})` : ''}`}
         collaborators={playlist.collaborators}
         canManage={canManageCollaborators}
+      />
+
+      <PlaylistFormModal
+        opened={editModalOpen}
+        onClose={() => setEditModalOpen(false)}
+        title="Modifier la playlist"
+        submitLabel="Enregistrer"
+        initialValues={{
+          name: playlist.name,
+          description: playlist.description,
+          image: playlist.image,
+        }}
+        onSubmit={handleUpdatePlaylist}
       />
 
       <Stack gap="md">

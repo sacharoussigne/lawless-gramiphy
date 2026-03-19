@@ -102,6 +102,7 @@ model Playlist {
   id            String                 @id @default(cuid())
   name          String
   description   String?
+  image         String?
   ownerId       String
   owner         User                   @relation(fields: [ownerId], references: [id], onDelete: Cascade)
   tracks        PlaylistTrack[]

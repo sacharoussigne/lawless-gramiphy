@@ -5,11 +5,53 @@ import { actionErrorParser } from '@/lib/action';
 import { getAuthSession } from '@/lib/auth';
 import type { ServerActionResponse } from '@/types/api';
 import { checkRolePermission } from '@/lib/auth/permissions';
+import { z } from 'zod/v3';
+
+const MAX_IMAGE_BYTES = 1_000_000;
+
+const playlistImageSchema = z
+  .string()
+  .nullable()
+  .optional()
+  .refine((value) => {
+    if (value === undefined || value === null || value.length === 0) return true;
+
+    if (value.startsWith('data:image/')) {
+      const match = value.match(/^data:image\/(png|jpeg|webp);base64,([A-Za-z0-9+/=]+)$/);
+      if (!match) return false;
+
+      const base64 = match[2] ?? '';
+      const padding = base64.endsWith('==') ? 2 : base64.endsWith('=') ? 1 : 0;
+      const bytes = Math.floor((base64.length * 3) / 4) - padding;
+      return bytes <= MAX_IMAGE_BYTES;
+    }
+
+    try {
+      new URL(value);
+      return true;
+    } catch {
+      return false;
+    }
+  }, 'Image invalide (URL ou Data URL base64 <= 1MB)');
+
+const createPlaylistSchema = z.object({
+  name: z.string().min(1, 'Le nom de la playlist est requis'),
+  description: z.string().optional(),
+  image: playlistImageSchema,
+});
+
+const updatePlaylistSchema = z.object({
+  id: z.string().min(1, 'Playlist introuvable'),
+  name: z.string().min(1, 'Le nom de la playlist est requis'),
+  description: z.string().optional(),
+  image: playlistImageSchema,
+});
 
 type PlaylistSummary = {
   id: string;
   name: string;
   description: string | null;
+  image: string | null;
   ownerId: string;
   ownerName: string | null;
   tracksCount: number;
@@ -23,6 +65,7 @@ type PlaylistWithTracks = {
   id: string;
   name: string;
   description: string | null;
+  image: string | null;
   ownerId: string;
   ownerName: string | null;
   ownerEmail?: string | null;
@@ -118,6 +161,7 @@ export async function getPlaylists(): Promise<ServerActionResponse<PlaylistSumma
         id: pl.id,
         name: pl.name,
         description: pl.description,
+        image: pl.image,
         ownerId: pl.ownerId,
         ownerName: pl.owner?.name ?? null,
         tracksCount: pl.tracks.length,
@@ -200,6 +244,7 @@ export async function getManageablePlaylistsForTrack(
         id: pl.id,
         name: pl.name,
         description: pl.description,
+        image: pl.image,
         ownerId: pl.ownerId,
         ownerName: pl.owner?.name ?? null,
         tracksCount: pl.tracks.length,
@@ -287,6 +332,7 @@ export async function getPlaylist(id: string): Promise<ServerActionResponse<Play
       id: pl.id,
       name: pl.name,
       description: pl.description,
+      image: pl.image,
       ownerId: pl.ownerId,
       ownerName: pl.owner?.name ?? null,
       ownerEmail: pl.owner?.email ?? null,
@@ -328,6 +374,7 @@ export async function getPlaylist(id: string): Promise<ServerActionResponse<Play
 export async function createPlaylist(
   name: string,
   description?: string,
+  image?: string | null,
 ): Promise<ServerActionResponse<PlaylistSummary>> {
   try {
     const session = await getAuthSession();
@@ -341,15 +388,15 @@ export async function createPlaylist(
       return { status: 403, error: 'Accès refusé' };
     }
 
-    const trimmedName = name.trim();
-    if (!trimmedName) {
-      return { status: 400, error: 'Le nom de la playlist est requis' };
-    }
+    const validated = createPlaylistSchema.parse({ name, description, image });
+    const trimmedName = validated.name.trim();
+    if (!trimmedName) return { status: 400, error: 'Le nom de la playlist est requis' };
 
     const playlist = await prisma.playlist.create({
       data: {
         name: trimmedName,
-        description: description?.trim() || null,
+        description: validated.description?.trim() || null,
+        image: validated.image === '' ? null : (validated.image ?? null),
         ownerId: session.user.id,
       },
       include: {
@@ -367,6 +414,7 @@ export async function createPlaylist(
       id: playlist.id,
       name: playlist.name,
       description: playlist.description,
+      image: playlist.image,
       ownerId: playlist.ownerId,
       ownerName: playlist.owner?.name ?? null,
       tracksCount: playlist.tracks.length,
@@ -385,6 +433,77 @@ export async function createPlaylist(
         typeof parsed.error === 'string'
           ? parsed.error
           : 'Erreur lors de la création de la playlist',
+    };
+  }
+}
+
+export async function updatePlaylist(data: {
+  id: string;
+  name: string;
+  description?: string;
+  image?: string | null;
+}): Promise<ServerActionResponse<PlaylistWithTracks>> {
+  try {
+    const session = await getAuthSession();
+    if (!session) {
+      return { status: 401, error: 'Non autorisé' };
+    }
+
+    const role = session.user.role ?? null;
+    const hasGramophoneAccess = checkRolePermission(role, 'gramophone', 'access');
+    if (!hasGramophoneAccess) {
+      return { status: 403, error: 'Accès refusé' };
+    }
+
+    const validated = updatePlaylistSchema.parse(data);
+    const trimmedName = validated.name.trim();
+    if (!trimmedName) {
+      return { status: 400, error: 'Le nom de la playlist est requis' };
+    }
+
+    const playlist = await prisma.playlist.findUnique({
+      where: { id: validated.id },
+      include: {
+        collaborators: true,
+      },
+    });
+
+    if (!playlist) {
+      return { status: 404, error: 'Playlist introuvable' };
+    }
+
+    const permissions = computePlaylistPermissions({
+      playlistOwnerId: playlist.ownerId,
+      userId: session.user.id,
+      role,
+      collaboratorsUserIds: playlist.collaborators.map((c) => c.userId),
+    });
+
+    if (!permissions.isOwner && !permissions.isAdminOrDj) {
+      return {
+        status: 403,
+        error: 'Vous ne pouvez modifier que vos propres playlists',
+      };
+    }
+
+    await prisma.playlist.update({
+      where: { id: validated.id },
+      data: {
+        name: trimmedName,
+        description: validated.description?.trim() || null,
+        image: validated.image === '' ? null : (validated.image ?? null),
+      },
+    });
+
+    return await getPlaylist(validated.id);
+  } catch (error) {
+    const parsed = actionErrorParser(error, 'Erreur lors de la mise à jour de la playlist');
+    return {
+      status: parsed.status as 400 | 401 | 403 | 404 | 422 | 500,
+      error:
+        typeof parsed.error === 'string'
+          ? parsed.error
+          : 'Erreur lors de la mise à jour de la playlist',
     };
   }
 }

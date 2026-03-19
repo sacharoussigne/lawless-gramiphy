@@ -3,16 +3,16 @@
 import { useMemo, useState } from 'react';
 import {
   Alert,
+  Avatar,
   Button,
   Card,
   Group,
-  Modal,
   Stack,
   Text,
+  Select,
+  SegmentedControl,
   TextInput,
   Title,
-  SegmentedControl,
-  Select,
 } from '@mantine/core';
 import { IconAlertCircle, IconMusic, IconPlayerPlay } from '@tabler/icons-react';
 import { useRouter } from 'next/navigation';
@@ -21,6 +21,7 @@ import { handleAction } from '@/lib/action';
 import { notifications } from '@mantine/notifications';
 import Link from 'next/link';
 import { routes } from '@/types/routes';
+import PlaylistFormModal from './_components/PlaylistFormModal';
 
 type PlaylistScope = 'all' | 'mine' | 'shared';
 type PlaylistSort = 'date_desc' | 'date_asc' | 'name' | 'tracks';
@@ -29,6 +30,7 @@ type PlaylistSummary = {
   id: string;
   name: string;
   description: string | null;
+  image: string | null;
   ownerId: string;
   ownerName: string | null;
   tracksCount: number;
@@ -50,9 +52,6 @@ export default function PlaylistsPageClient({
   const router = useRouter();
   const [playlists] = useState(initialPlaylists);
   const [createModalOpen, setCreateModalOpen] = useState(false);
-  const [newName, setNewName] = useState('');
-  const [newDescription, setNewDescription] = useState('');
-  const [creating, setCreating] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
@@ -99,32 +98,21 @@ export default function PlaylistsPageClient({
     return list;
   }, [playlists, currentUserId, scope, search, sortBy]);
 
-  const handleCreate = async () => {
-    if (!newName.trim()) return;
-    setCreating(true);
+  const handleCreate = async (values: { name: string; description?: string; image?: string | null }) => {
     setError(null);
     try {
-      const result = await createPlaylist(newName, newDescription);
+      const result = await createPlaylist(values.name, values.description, values.image);
       handleAction(result);
       notifications.show({
         title: 'Playlist créée',
         message: 'La playlist a été créée avec succès',
         color: 'green',
       });
-      setCreateModalOpen(false);
-      setNewName('');
-      setNewDescription('');
       router.refresh();
     } catch (e: any) {
       const message = e.message || 'Erreur inconnue';
       setError(message);
-      notifications.show({
-        title: 'Erreur',
-        message,
-        color: 'red',
-      });
-    } finally {
-      setCreating(false);
+      throw e;
     }
   };
 
@@ -253,17 +241,22 @@ export default function PlaylistsPageClient({
                 style={{ textDecoration: 'none' }}
               >
                 <Group justify="space-between" align="flex-start">
-                  <Stack gap={4}>
-                    <Text fw={500}>{pl.name}</Text>
-                    {pl.description && (
-                      <Text size="sm" c="dimmed">
-                        {pl.description}
+                  <Group gap="sm" align="flex-start" wrap="nowrap">
+                    <Avatar src={pl.image} radius="md" size={56}>
+                      {pl.name.slice(0, 1).toUpperCase()}
+                    </Avatar>
+                    <Stack gap={4}>
+                      <Text fw={500}>{pl.name}</Text>
+                      {pl.description && (
+                        <Text size="sm" c="dimmed">
+                          {pl.description}
+                        </Text>
+                      )}
+                      <Text size="xs" c="dimmed">
+                        {pl.tracksCount} piste{pl.tracksCount > 1 ? 's' : ''} · Créée par {pl.ownerName ?? 'Inconnu'}
                       </Text>
-                    )}
-                    <Text size="xs" c="dimmed">
-                      {pl.tracksCount} piste{pl.tracksCount > 1 ? 's' : ''} · Créée par {pl.ownerName ?? 'Inconnu'}
-                    </Text>
-                  </Stack>
+                    </Stack>
+                  </Group>
                   {pl.canEdit && (
                     <Button
                       size="xs"
@@ -285,30 +278,13 @@ export default function PlaylistsPageClient({
           </Stack>
         )}
 
-        <Modal opened={createModalOpen} onClose={() => setCreateModalOpen(false)} title="Nouvelle playlist">
-          <Stack gap="sm">
-            <TextInput
-              label="Nom"
-              value={newName}
-              onChange={(e) => setNewName(e.currentTarget.value)}
-              placeholder="Nom de la playlist"
-            />
-            <TextInput
-              label="Description"
-              value={newDescription}
-              onChange={(e) => setNewDescription(e.currentTarget.value)}
-              placeholder="Optionnel"
-            />
-            <Group justify="flex-end" mt="md">
-              <Button variant="default" onClick={() => setCreateModalOpen(false)}>
-                Annuler
-              </Button>
-              <Button onClick={handleCreate} loading={creating} disabled={!newName.trim()}>
-                Créer
-              </Button>
-            </Group>
-          </Stack>
-        </Modal>
+      <PlaylistFormModal
+        opened={createModalOpen}
+        onClose={() => setCreateModalOpen(false)}
+        title="Nouvelle playlist"
+        submitLabel="Créer"
+        onSubmit={handleCreate}
+      />
     </Stack>
   );
 }

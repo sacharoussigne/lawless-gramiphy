@@ -89,8 +89,7 @@ export default function TrackRow<TTrack extends TrackShape>({
               <img
                 src={track.thumbnail}
                 alt={track.title}
-                width={44}
-                height={44}
+                width={100}
                 style={{ borderRadius: 10, objectFit: 'cover' }}
               />
             </Link>
