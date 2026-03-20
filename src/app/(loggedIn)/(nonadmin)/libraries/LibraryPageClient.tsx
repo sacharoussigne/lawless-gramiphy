@@ -25,6 +25,7 @@ import {
   IconSearch,
   IconCheck,
   IconSquare,
+  IconStack2,
 } from '@tabler/icons-react';
 import TrackRow from '../../_components/Tracks/TrackRow';
 import AddToPlaylistModal from '../../_components/Tracks/AddToPlaylistModal';
@@ -34,6 +35,7 @@ import { handleAction } from '@/lib/action';
 import { notifications } from '@mantine/notifications';
 import Link from 'next/link';
 import { routes } from '@/types/routes';
+import { MAX_MIX_DURATION_SECONDS, MIN_MIX_TRACK_COUNT } from '@/constants/mix';
 
 type Track = {
   id: string;
@@ -41,6 +43,7 @@ type Track = {
   artist: string | null;
   youtubeUrl: string;
   s3Url: string;
+  fileSizeMb: number | null;
   duration: number | null;
   thumbnail: string | null;
   uploaderId: string | null;
@@ -75,7 +78,113 @@ export default function LibraryPageClient({ initialTracks }: LibraryPageClientPr
   const [uploaderFilter, setUploaderFilter] = useState<string | null>(null);
   const [sortBy, setSortBy] = useState<'date_desc' | 'date_asc' | 'title' | 'artist'>('date_desc');
   const [addToPlaylistTrack, setAddToPlaylistTrack] = useState<Track | null>(null);
+  const [mixTrackIds, setMixTrackIds] = useState<string[]>([]);
+  const [mixJobId, setMixJobId] = useState<string | null>(null);
+  const [mixBusy, setMixBusy] = useState(false);
+  const [lastMixUrl, setLastMixUrl] = useState<string | null>(null);
+  const [mixMode, setMixMode] = useState(false);
   const urlInputRef = useRef<HTMLInputElement | null>(null);
+
+  const libraryTrackById = useMemo(() => new Map(initialTracks.map((t) => [t.id, t])), [initialTracks]);
+
+  const mixTotalSeconds = useMemo(() => {
+    return mixTrackIds.reduce((acc, id) => acc + (libraryTrackById.get(id)?.duration ?? 0), 0);
+  }, [mixTrackIds, libraryTrackById]);
+
+  const hasUnknownMixDuration = useMemo(
+    () => mixTrackIds.some((id) => libraryTrackById.get(id)?.duration == null),
+    [mixTrackIds, libraryTrackById],
+  );
+
+  const mixOverLimit = mixTotalSeconds > MAX_MIX_DURATION_SECONDS;
+  const mixTrackIdSet = useMemo(() => new Set(mixTrackIds), [mixTrackIds]);
+
+  const handleMixSelectChange = (trackId: string, selected: boolean) => {
+    setMixTrackIds((prev) => {
+      if (selected) {
+        if (prev.includes(trackId)) return prev;
+        return [...prev, trackId];
+      }
+      return prev.filter((id) => id !== trackId);
+    });
+  };
+
+  const clearMixTracks = () => setMixTrackIds([]);
+
+  const exitMixMode = () => {
+    setMixMode(false);
+    setMixTrackIds([]);
+  };
+
+  const handleBuildMix = async () => {
+    if (mixTrackIds.length < MIN_MIX_TRACK_COUNT) return;
+    setMixBusy(true);
+    setLastMixUrl(null);
+    try {
+      const res = await fetch('/api/mixes/build', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ trackIds: mixTrackIds }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(typeof json?.error === 'string' ? json.error : 'Impossible de créer le mix');
+      }
+      const jobId = json?.data?.jobId as string | undefined;
+      if (!jobId) throw new Error('Réponse serveur invalide');
+      setMixJobId(jobId);
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : 'Erreur inconnue';
+      notifications.show({ title: 'Erreur', message, color: 'red' });
+      setMixBusy(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!mixJobId) return;
+
+    let cancelled = false;
+    const interval = window.setInterval(async () => {
+      try {
+        const res = await fetch(`/api/mixes/build?jobId=${encodeURIComponent(mixJobId)}`, {
+          credentials: 'include',
+        });
+        const json = await res.json().catch(() => ({}));
+        const data = json?.data;
+        if (!data || cancelled) return;
+
+        if (data.status === 'done' && data.s3Url) {
+          window.clearInterval(interval);
+          setMixBusy(false);
+          setMixJobId(null);
+          setLastMixUrl(data.s3Url);
+          await navigator.clipboard.writeText(data.s3Url);
+          notifications.show({
+            title: 'Mix prêt',
+            message: 'Lien du mix copié dans le presse-papiers',
+            color: 'green',
+          });
+        } else if (data.status === 'error') {
+          window.clearInterval(interval);
+          setMixBusy(false);
+          setMixJobId(null);
+          notifications.show({
+            title: 'Erreur',
+            message: data.error || data.message || 'Échec du mix',
+            color: 'red',
+          });
+        }
+      } catch {
+        // ignore
+      }
+    }, 800);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
+  }, [mixJobId]);
 
   const openSpotlight = () => {
     if (loading) return;
@@ -192,6 +301,8 @@ export default function LibraryPageClient({ initialTracks }: LibraryPageClientPr
 
     return list;
   }, [initialTracks, search, uploaderFilter, sortBy]);
+
+  const selectFilteredForMix = () => setMixTrackIds(filteredTracks.map((t) => t.id));
 
   const handleDownload = async () => {
     if (!url.trim()) return;
@@ -388,6 +499,17 @@ export default function LibraryPageClient({ initialTracks }: LibraryPageClientPr
             >
               Ajouter
             </Button>
+            {(mixMode || filteredTracks.length >= MIN_MIX_TRACK_COUNT) && (
+              <Button
+                size="sm"
+                variant="light"
+                color="green"
+                leftSection={<IconStack2 size={16} />}
+                onClick={() => (mixMode ? exitMixMode() : setMixMode(true))}
+              >
+                {mixMode ? 'Annuler' : 'Créer un mix'}
+              </Button>
+            )}
           </Group>
         </Group>
 
@@ -447,6 +569,94 @@ export default function LibraryPageClient({ initialTracks }: LibraryPageClientPr
             </Group>
           </Card>
 
+          {mixMode && initialTracks.length >= MIN_MIX_TRACK_COUNT && (
+            <Alert variant="light" color="green" icon={<IconStack2 size={18} />} title="Mode mix">
+              <Stack gap="sm">
+                {filteredTracks.length === 0 ? (
+                  <Group justify="space-between" wrap="wrap" gap="sm">
+                    <Text size="sm" c="dimmed">
+                      Aucune musique ne correspond aux filtres. Ajuste la recherche ou quitte le mode mix.
+                    </Text>
+                    <Button size="xs" variant="subtle" color="gray" onClick={exitMixMode}>
+                      Quitter
+                    </Button>
+                  </Group>
+                ) : filteredTracks.length < MIN_MIX_TRACK_COUNT ? (
+                  <Group justify="space-between" wrap="wrap" gap="sm">
+                    <Text size="sm" c="dimmed">
+                      Il faut au moins {MIN_MIX_TRACK_COUNT} musiques dans la liste affichée pour un mix. Élargis les
+                      filtres ou quitte le mode mix.
+                    </Text>
+                    <Button size="xs" variant="subtle" color="gray" onClick={exitMixMode}>
+                      Quitter
+                    </Button>
+                  </Group>
+                ) : (
+                  <>
+                    <Group justify="space-between" align="center" wrap="wrap" gap="sm">
+                      <Text size="xs" c="dimmed">
+                        Sélectionne au moins {MIN_MIX_TRACK_COUNT} musiques. Ordre = ordre de sélection. Max{' '}
+                        {Math.floor(MAX_MIX_DURATION_SECONDS / 60)} min.
+                      </Text>
+                      <Group gap="xs" justify="flex-end" wrap="wrap" align="center">
+                        <Button size="xs" variant="subtle" color="gray" onClick={selectFilteredForMix}>
+                          Tout sélectionner
+                        </Button>
+                        {mixTrackIds.length > 0 && (
+                          <Button size="xs" variant="subtle" color="gray" onClick={clearMixTracks}>
+                            Effacer
+                          </Button>
+                        )}
+                        <Button size="xs" variant="subtle" color="gray" onClick={exitMixMode}>
+                          Quitter
+                        </Button>
+                      </Group>
+                    </Group>
+                    <Group gap="md" align="center" wrap="wrap">
+                      <Text size="sm">
+                        Sélection : {mixTrackIds.length} · Durée estimée :{' '}
+                        <Text span fw={600}>
+                          {Math.floor(mixTotalSeconds / 60)}:{(mixTotalSeconds % 60).toString().padStart(2, '0')}
+                        </Text>
+                        {mixOverLimit && (
+                          <Text span c="red" ml="xs">
+                            (dépasse la limite)
+                          </Text>
+                        )}
+                      </Text>
+                      {mixTrackIds.length > 0 && mixTrackIds.length < MIN_MIX_TRACK_COUNT && (
+                        <Text size="xs" c="orange">
+                          Sélectionne encore des musiques : il en faut au moins {MIN_MIX_TRACK_COUNT}.
+                        </Text>
+                      )}
+                      {hasUnknownMixDuration && (
+                        <Text size="xs" c="orange">
+                          Durée inconnue sur au moins une piste : la génération peut échouer.
+                        </Text>
+                      )}
+                    </Group>
+                    <Group gap="xs" align="center">
+                      <Button
+                        size="sm"
+                        color="green"
+                        onClick={() => void handleBuildMix()}
+                        disabled={
+                          mixBusy ||
+                          mixTrackIds.length < MIN_MIX_TRACK_COUNT ||
+                          mixOverLimit ||
+                          hasUnknownMixDuration
+                        }
+                        leftSection={mixBusy ? <Loader size={14} color="white" /> : undefined}
+                      >
+                        {mixBusy ? 'Génération…' : 'Générer et copier le lien'}
+                      </Button>
+                    </Group>
+                  </>
+                )}
+              </Stack>
+            </Alert>
+          )}
+
           {filteredTracks.length === 0 ? (
             <Stack gap="xs" align="center" py="xl">
               <Text c="dimmed" ta="center">
@@ -482,6 +692,9 @@ export default function LibraryPageClient({ initialTracks }: LibraryPageClientPr
                   onOpenAddToPlaylistMenu={(t) => void openAddToPlaylistMenu(t as any)}
                   onDeleteTrack={(t) => void handleDelete(t as any)}
                   deleting={deletingId === track.id}
+                  mixSelectMode={mixMode}
+                  mixSelected={mixTrackIdSet.has(track.id)}
+                  onMixSelectChange={handleMixSelectChange}
                 />
               ))}
             </Stack>

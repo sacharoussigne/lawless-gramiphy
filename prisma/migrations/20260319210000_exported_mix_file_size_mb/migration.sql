@@ -1,0 +1,3 @@
+ALTER TABLE "exported_mixes" ADD COLUMN "fileSizeMb" DOUBLE PRECISION NOT NULL DEFAULT 0;
+
+ALTER TABLE "exported_mixes" ALTER COLUMN "fileSizeMb" DROP DEFAULT;

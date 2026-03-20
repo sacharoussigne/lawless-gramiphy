@@ -5,6 +5,7 @@ import {
   Avatar,
   Button,
   Group,
+  Loader,
   Stack,
   Text,
   Title,
@@ -15,25 +16,30 @@ import {
 } from '@mantine/core';
 import {
   IconAlertCircle,
-  IconCheck,
-  IconCopy,
   IconMusic,
   IconPlayerPlay,
+  IconArrowsDownUp,
   IconPlaylist,
   IconPin,
   IconPinnedOff,
+  IconStack2,
 } from '@tabler/icons-react';
 import { useRouter } from 'next/navigation';
 import {
   removeTrackFromPlaylist,
+  reorderTracksInPlaylist,
   togglePinnedPlaylist,
   updatePlaylist,
 } from '@/app/_actions/playlists';
 import { handleAction } from '@/lib/action';
 import { notifications } from '@mantine/notifications';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type CSSProperties } from 'react';
 import Link from 'next/link';
 import { routes } from '@/types/routes';
+import { MAX_MIX_DURATION_SECONDS, MIN_MIX_TRACK_COUNT } from '@/constants/mix';
+import { DndContext, PointerSensor, useSensor, closestCenter } from '@dnd-kit/core';
+import { arrayMove, SortableContext, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 import CollaboratorsModal from './_components/CollaboratorsModal';
 import TrackRow from '../../../_components/Tracks/TrackRow';
 import useSingleAudioPlayer from '../../../_components/Tracks/useSingleAudioPlayer';
@@ -84,10 +90,15 @@ export default function PlaylistDetailsPageClient({ playlist }: PlaylistDetailsP
   const [removingId, setRemovingId] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [copiedId, setCopiedId] = useState<string | null>(null);
-  const [copiedMixMode, setCopiedMixMode] = useState<'game' | 'stream' | null>(null);
+  const [mixTrackIds, setMixTrackIds] = useState<string[]>([]);
+  const [mixJobId, setMixJobId] = useState<string | null>(null);
+  const [mixBusy, setMixBusy] = useState(false);
+  const [lastMixUrl, setLastMixUrl] = useState<string | null>(null);
+  const [mixMode, setMixMode] = useState(false);
   const [collaboratorsModalOpen, setCollaboratorsModalOpen] = useState(false);
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [pinLoading, setPinLoading] = useState(false);
+  const [reorderBusy, setReorderBusy] = useState(false);
 
   const filteredTracks = useMemo(() => {
     if (!search.trim()) return playlist.tracks;
@@ -100,6 +111,12 @@ export default function PlaylistDetailsPageClient({ playlist }: PlaylistDetailsP
     });
   }, [playlist.tracks, search]);
 
+  const displayTracks = useMemo(() => {
+    const tracks = [...filteredTracks];
+    tracks.sort((a, b) => a.position - b.position);
+    return tracks;
+  }, [filteredTracks]);
+
   const handleCopy = (s3Url: string, id: string) => {
     navigator.clipboard.writeText(s3Url);
     setCopiedId(id);
@@ -111,29 +128,125 @@ export default function PlaylistDetailsPageClient({ playlist }: PlaylistDetailsP
     });
   };
 
-  const handleCopyMixGameUrl = () => {
-    const mixUrl = `${window.location.origin}/api/mixes/playlist/${playlist.id}/mix.mp3`;
-    navigator.clipboard.writeText(mixUrl);
-    setCopiedMixMode('game');
-    setTimeout(() => setCopiedMixMode(null), 2000);
-    notifications.show({
-      title: 'Copié',
-      message: 'Lien mix (.mp3, Content-Length) pour le jeu',
-      color: 'blue',
+  const orderedPlaylistIds = useMemo(
+    () => [...playlist.tracks].sort((a, b) => a.position - b.position).map((t) => t.id),
+    [playlist.tracks],
+  );
+
+  const canReorder = playlist.canEdit && !mixMode && !search.trim();
+  const displayTrackIds = useMemo(() => displayTracks.map((t) => t.id), [displayTracks]);
+
+  const trackById = useMemo(() => new Map(playlist.tracks.map((t) => [t.id, t])), [playlist.tracks]);
+
+  const effectiveMixIds = mixTrackIds.length > 0 ? mixTrackIds : orderedPlaylistIds;
+
+  const mixTotalSeconds = useMemo(() => {
+    return effectiveMixIds.reduce((acc, id) => acc + (trackById.get(id)?.duration ?? 0), 0);
+  }, [effectiveMixIds, trackById]);
+
+  const hasUnknownMixDuration = useMemo(
+    () => effectiveMixIds.some((id) => trackById.get(id)?.duration == null),
+    [effectiveMixIds, trackById],
+  );
+
+  const mixOverLimit = mixTotalSeconds > MAX_MIX_DURATION_SECONDS;
+  const mixEffectiveTrackCount =
+    mixTrackIds.length > 0 ? mixTrackIds.length : orderedPlaylistIds.length;
+  const mixTooFewTracks = mixEffectiveTrackCount < MIN_MIX_TRACK_COUNT;
+  const mixTrackIdSet = useMemo(() => new Set(mixTrackIds), [mixTrackIds]);
+
+  const handleMixSelectChange = (trackId: string, selected: boolean) => {
+    setMixTrackIds((prev) => {
+      if (selected) {
+        if (prev.includes(trackId)) return prev;
+        return [...prev, trackId];
+      }
+      return prev.filter((id) => id !== trackId);
     });
   };
 
-  const handleCopyMixStreamUrl = () => {
-    const mixUrl = `${window.location.origin}/api/mixes/playlist?playlistId=${encodeURIComponent(playlist.id)}`;
-    navigator.clipboard.writeText(mixUrl);
-    setCopiedMixMode('stream');
-    setTimeout(() => setCopiedMixMode(null), 2000);
-    notifications.show({
-      title: 'Copié',
-      message: 'Lien mix streaming (navigateur)',
-      color: 'blue',
-    });
+  const selectAllMixTracks = () => setMixTrackIds(orderedPlaylistIds);
+  const clearMixTracks = () => setMixTrackIds([]);
+
+  const exitMixMode = () => {
+    setMixMode(false);
+    setMixTrackIds([]);
   };
+
+  const sensors = useSensor(PointerSensor, { activationConstraint: { distance: 6 } });
+
+  const handleBuildMix = async () => {
+    if (orderedPlaylistIds.length === 0) return;
+    setMixBusy(true);
+    setLastMixUrl(null);
+    try {
+      const res = await fetch('/api/mixes/build', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          playlistId: playlist.id,
+          trackIds: mixTrackIds.length > 0 ? mixTrackIds : [],
+        }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(typeof json?.error === 'string' ? json.error : 'Impossible de créer le mix');
+      }
+      const jobId = json?.data?.jobId as string | undefined;
+      if (!jobId) throw new Error('Réponse serveur invalide');
+      setMixJobId(jobId);
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : 'Erreur inconnue';
+      notifications.show({ title: 'Erreur', message, color: 'red' });
+      setMixBusy(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!mixJobId) return;
+
+    let cancelled = false;
+    const interval = window.setInterval(async () => {
+      try {
+        const res = await fetch(`/api/mixes/build?jobId=${encodeURIComponent(mixJobId)}`, {
+          credentials: 'include',
+        });
+        const json = await res.json().catch(() => ({}));
+        const data = json?.data;
+        if (!data || cancelled) return;
+
+        if (data.status === 'done' && data.s3Url) {
+          window.clearInterval(interval);
+          setMixBusy(false);
+          setMixJobId(null);
+          setLastMixUrl(data.s3Url);
+          await navigator.clipboard.writeText(data.s3Url);
+          notifications.show({
+            title: 'Mix prêt',
+            message: 'Lien du mix copié dans le presse-papiers',
+            color: 'green',
+          });
+        } else if (data.status === 'error') {
+          window.clearInterval(interval);
+          setMixBusy(false);
+          setMixJobId(null);
+          notifications.show({
+            title: 'Erreur',
+            message: data.error || data.message || 'Échec du mix',
+            color: 'red',
+          });
+        }
+      } catch {
+        // ignore transient polling errors
+      }
+    }, 800);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
+  }, [mixJobId]);
 
   const handleRemove = async (track: PlaylistTrack) => {
     if (!playlist.canEdit) return;
@@ -191,6 +304,90 @@ export default function PlaylistDetailsPageClient({ playlist }: PlaylistDetailsP
   const canManageCollaborators = playlist.isOwner || playlist.isAdminOrDj;
   const canEditMetadata = playlist.isOwner || playlist.isAdminOrDj;
 
+  const handleReorder = async (newOrderedTrackIds: string[]) => {
+    if (reorderBusy) return;
+    setReorderBusy(true);
+    try {
+      const result = await reorderTracksInPlaylist(playlist.id, newOrderedTrackIds);
+      handleAction(result);
+      notifications.show({
+        title: 'Ordre mis à jour',
+        message: 'Les musiques ont été réordonnées',
+        color: 'green',
+      });
+      router.refresh();
+    } catch (e: any) {
+      const message = e.message || 'Erreur inconnue';
+      notifications.show({
+        title: 'Erreur',
+        message,
+        color: 'red',
+      });
+    } finally {
+      setReorderBusy(false);
+    }
+  };
+
+  function SortableTrackRowItem({ track }: { track: PlaylistTrack }) {
+    const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } = useSortable(
+      {
+        id: track.id,
+        disabled: !canReorder || reorderBusy,
+      },
+    );
+
+    const style: CSSProperties = {
+      transform: CSS.Transform.toString(transform),
+      transition,
+      opacity: isDragging ? 0.6 : 1,
+    };
+
+    return (
+      <div ref={setNodeRef} style={style}>
+        <div style={{ display: 'flex', alignItems: 'stretch', gap: 8 }}>
+          <div
+            ref={setActivatorNodeRef}
+            {...attributes}
+            {...listeners}
+            style={{
+              width: 30,
+              display: 'flex',
+              alignItems: 'flex-start',
+              justifyContent: 'center',
+              paddingTop: 10,
+              touchAction: 'none',
+              cursor: canReorder ? 'grab' : 'default',
+              userSelect: 'none',
+            }}
+            aria-label="Réordonner"
+            title="Réordonner"
+          >
+            <IconArrowsDownUp size={16} stroke={1.8} />
+          </div>
+          <div style={{ flex: 1 }}>
+            <TrackRow
+              track={{ ...track, canDelete: playlist.canEdit }}
+              trackHref={`/tracks/${track.id}`}
+              currentTrackId={audioPlayer.currentTrackId}
+              isPlaying={audioPlayer.isPlaying}
+              progressRatio={audioPlayer.progressRatio}
+              onTogglePlay={(args) => audioPlayer.togglePlay(args)}
+              onCopy={handleCopy}
+              copiedTrackId={copiedId}
+              onDeleteTrack={(t) => void handleRemove(t as any)}
+              deleting={removingId === track.id}
+              showAddToPlaylist={false}
+              removeActionLabel="Retirer"
+              mixSelectMode={mixMode}
+              mixSelected={mixTrackIdSet.has(track.id)}
+              onMixSelectChange={handleMixSelectChange}
+            />
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   const handleUpdatePlaylist = async (values: {
     name: string;
     description?: string;
@@ -241,29 +438,11 @@ export default function PlaylistDetailsPageClient({ playlist }: PlaylistDetailsP
           </Group>
         </Stack>
         <Group gap="xs">
-          <Button
-            size="xs"
-            variant="subtle"
-            color={copiedMixMode === 'game' ? 'green' : undefined}
-            leftSection={copiedMixMode === 'game' ? <IconCheck size={14} /> : <IconCopy size={14} />}
-            onClick={handleCopyMixGameUrl}
-          >
-            {copiedMixMode === 'game' ? 'Lien jeu copié' : 'Copier mix (jeu)'}
-          </Button>
-          <Button
-            size="xs"
-            variant="subtle"
-            color={copiedMixMode === 'stream' ? 'green' : undefined}
-            leftSection={copiedMixMode === 'stream' ? <IconCheck size={14} /> : <IconCopy size={14} />}
-            onClick={handleCopyMixStreamUrl}
-          >
-            {copiedMixMode === 'stream' ? 'Lien stream copié' : 'Copier mix (navigateur)'}
-          </Button>
           <Tooltip label={playlist.isPinned ? 'Désépingler' : 'Épingler'} withArrow>
             <ActionIcon
               size="lg"
               variant={playlist.isPinned ? 'filled' : 'subtle'}
-              color={playlist.isPinned ? 'blue' : 'gray'}
+              color={playlist.isPinned ? 'green' : 'gray'}
               loading={pinLoading}
               onClick={() => void handleTogglePin()}
               aria-label={playlist.isPinned ? 'Désépingler la playlist' : 'Épingler la playlist'}
@@ -307,12 +486,98 @@ export default function PlaylistDetailsPageClient({ playlist }: PlaylistDetailsP
           >
             Bibliothèque
           </Button>
+          {(mixMode || playlist.tracks.length >= MIN_MIX_TRACK_COUNT) && (
+            <Button
+              size="xs"
+              variant="light"
+              color="green"
+              leftSection={<IconStack2 size={14} />}
+              onClick={() => (mixMode ? exitMixMode() : setMixMode(true))}
+            >
+              {mixMode ? 'Annuler' : 'Créer un mix'}
+            </Button>
+          )}
         </Group>
       </Group>
 
       {error && (
         <Alert icon={<IconAlertCircle size={16} />} color="red">
           {error}
+        </Alert>
+      )}
+
+      {playlist.tracks.length >= MIN_MIX_TRACK_COUNT && mixMode && (
+        <Alert variant="light" color="green" icon={<IconStack2 size={18} />} title="Mode mix">
+          <Stack gap="sm">
+            <Group justify="space-between" align="center" wrap="wrap" gap="sm">
+              <Text size="xs" c="dimmed">
+                Coche des pistes pour un sous-ensemble (min. 2), ou laisse tout décoché pour toute la playlist dans
+                l’ordre (min. 2 musiques au total). Max {Math.floor(MAX_MIX_DURATION_SECONDS / 60)} min.
+              </Text>
+              <Group gap="xs" justify="flex-end" wrap="wrap" align="center">
+                <Button size="xs" variant="subtle" color="gray" onClick={selectAllMixTracks}>
+                  Tout sélectionner
+                </Button>
+                {mixTrackIds.length > 0 && (
+                  <Button size="xs" variant="subtle" color="gray" onClick={clearMixTracks}>
+                    Effacer la sélection
+                  </Button>
+                )}
+                <Button size="xs" variant="subtle" color="gray" onClick={exitMixMode}>
+                  Quitter
+                </Button>
+              </Group>
+            </Group>
+            <Group gap="md" align="center" wrap="wrap">
+              <Text size="sm">
+                {mixTrackIds.length === 0 ? (
+                  <>
+                    Toute la playlist ({orderedPlaylistIds.length} piste{orderedPlaylistIds.length > 1 ? 's' : ''}) · durée
+                    estimée :{' '}
+                  </>
+                ) : (
+                  <>
+                    Sélection ({mixTrackIds.length} piste{mixTrackIds.length > 1 ? 's' : ''}) · durée estimée :{' '}
+                  </>
+                )}
+                <Text span fw={600}>
+                  {Math.floor(mixTotalSeconds / 60)}:{(mixTotalSeconds % 60).toString().padStart(2, '0')}
+                </Text>
+                {mixOverLimit && (
+                  <Text span c="red" ml="xs">
+                    (dépasse la limite)
+                  </Text>
+                )}
+              </Text>
+              {mixTooFewTracks && (
+                <Text size="xs" c="orange">
+                  Il faut au moins {MIN_MIX_TRACK_COUNT} musiques pour un mix (sélection ou playlist entière).
+                </Text>
+              )}
+              {hasUnknownMixDuration && (
+                <Text size="xs" c="orange">
+                  Certaines durées sont inconnues : la génération peut échouer.
+                </Text>
+              )}
+            </Group>
+            <Group gap="xs" align="center">
+              <Button
+                size="sm"
+                color="green"
+                onClick={() => void handleBuildMix()}
+                disabled={
+                  mixBusy ||
+                  orderedPlaylistIds.length < MIN_MIX_TRACK_COUNT ||
+                  mixTooFewTracks ||
+                  mixOverLimit ||
+                  hasUnknownMixDuration
+                }
+                leftSection={mixBusy ? <Loader size={14} color="white" /> : undefined}
+              >
+                {mixBusy ? 'Génération…' : 'Générer et copier le lien'}
+              </Button>
+            </Group>
+          </Stack>
         </Alert>
       )}
 
@@ -371,25 +636,55 @@ export default function PlaylistDetailsPageClient({ playlist }: PlaylistDetailsP
             Aucune musique ne correspond à la recherche.
           </Text>
         ) : (
-          <Stack gap="sm">
-            {filteredTracks.map((track) => (
-              <TrackRow
-                key={track.id}
-                track={{ ...track, canDelete: playlist.canEdit }}
-                trackHref={`/tracks/${track.id}`}
-                currentTrackId={audioPlayer.currentTrackId}
-                isPlaying={audioPlayer.isPlaying}
-                progressRatio={audioPlayer.progressRatio}
-                onTogglePlay={(args) => audioPlayer.togglePlay(args)}
-                onCopy={handleCopy}
-                copiedTrackId={copiedId}
-                onDeleteTrack={(t) => void handleRemove(t as any)}
-                deleting={removingId === track.id}
-                showAddToPlaylist={false}
-                removeActionLabel="Retirer"
-              />
-            ))}
-          </Stack>
+          canReorder ? (
+            <DndContext
+              sensors={[sensors]}
+              collisionDetection={closestCenter}
+              onDragEnd={(event) => {
+                const activeId = event.active.id as string;
+                const overId = event.over?.id as string | undefined;
+
+                if (!overId || activeId === overId) return;
+                const oldIndex = displayTrackIds.indexOf(activeId);
+                const newIndex = displayTrackIds.indexOf(overId);
+                if (oldIndex < 0 || newIndex < 0) return;
+
+                const newOrdered = arrayMove(displayTrackIds, oldIndex, newIndex);
+                void handleReorder(newOrdered);
+              }}
+            >
+              <SortableContext items={displayTrackIds} strategy={verticalListSortingStrategy}>
+                <Stack gap="sm">
+                  {displayTracks.map((track) => (
+                    <SortableTrackRowItem key={track.id} track={track} />
+                  ))}
+                </Stack>
+              </SortableContext>
+            </DndContext>
+          ) : (
+            <Stack gap="sm">
+              {displayTracks.map((track) => (
+                <TrackRow
+                  key={track.id}
+                  track={{ ...track, canDelete: playlist.canEdit }}
+                  trackHref={`/tracks/${track.id}`}
+                  currentTrackId={audioPlayer.currentTrackId}
+                  isPlaying={audioPlayer.isPlaying}
+                  progressRatio={audioPlayer.progressRatio}
+                  onTogglePlay={(args) => audioPlayer.togglePlay(args)}
+                  onCopy={handleCopy}
+                  copiedTrackId={copiedId}
+                  onDeleteTrack={(t) => void handleRemove(t as any)}
+                  deleting={removingId === track.id}
+                  showAddToPlaylist={false}
+                  removeActionLabel="Retirer"
+                  mixSelectMode={mixMode}
+                  mixSelected={mixTrackIdSet.has(track.id)}
+                  onMixSelectChange={handleMixSelectChange}
+                />
+              ))}
+            </Stack>
+          )
         )}
       </Stack>
     </Stack>

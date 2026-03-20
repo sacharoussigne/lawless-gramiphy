@@ -1,6 +1,6 @@
 'use client';
 
-import { ActionIcon, Button, Card, Group, Menu, Progress, Stack, Text } from '@mantine/core';
+import { ActionIcon, Button, Card, Checkbox, Group, Menu, Progress, Stack, Text } from '@mantine/core';
 import Link from 'next/link';
 import { useMemo } from 'react';
 import {
@@ -44,6 +44,9 @@ type TrackRowProps<TTrack extends TrackShape = TrackShape> = {
   canShowDelete?: boolean;
   showAddToPlaylist?: boolean;
   removeActionLabel?: string;
+  mixSelectMode?: boolean;
+  mixSelected?: boolean;
+  onMixSelectChange?: (trackId: string, selected: boolean) => void;
 };
 
 function formatDuration(s: number | null) {
@@ -69,6 +72,9 @@ export default function TrackRow<TTrack extends TrackShape>({
   canShowDelete = true,
   showAddToPlaylist = true,
   removeActionLabel = 'Supprimer',
+  mixSelectMode = false,
+  mixSelected = false,
+  onMixSelectChange,
 }: TrackRowProps<TTrack>) {
   const isActive = currentTrackId === track.id;
   const showProgress = isActive;
@@ -82,7 +88,13 @@ export default function TrackRow<TTrack extends TrackShape>({
     >
       <Group align="flex-start" justify="space-between" wrap="nowrap" gap="md">
         <Group align="center" gap="md" style={{ minWidth: 0, flex: 1 }}>
-          {/* Thumbnail */}
+          {mixSelectMode && (
+            <Checkbox
+              checked={mixSelected}
+              onChange={(e) => onMixSelectChange?.(track.id, e.currentTarget.checked)}
+              aria-label="Sélection pour mix"
+            />
+          )}
           {track.thumbnail ? (
             <Link href={trackHref} style={{ textDecoration: 'none' }}>
               {/* eslint-disable-next-line @next/next/no-img-element */}
