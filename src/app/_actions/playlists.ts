@@ -290,6 +290,106 @@ export async function getManageablePlaylistsForTrack(
   }
 }
 
+type PlaylistManageableSummaryForTracks = PlaylistSummary & { alreadyInCount: number };
+
+export async function getManageablePlaylistsForTracks(
+  trackIds: string[],
+): Promise<ServerActionResponse<PlaylistManageableSummaryForTracks[]>> {
+  try {
+    const session = await getAuthSession();
+    if (!session) {
+      return { status: 401, error: 'Non autorisé' };
+    }
+
+    const validatedTrackIds = z.array(z.string().min(1)).min(1).parse(trackIds);
+    const dedupedTrackIds = Array.from(new Set(validatedTrackIds));
+    const selectedSet = new Set(dedupedTrackIds);
+
+    const role = session.user.role ?? null;
+    const userId = session.user.id;
+
+    const hasGramophoneAccess = checkRolePermission(role, 'gramophone', 'access');
+    if (!hasGramophoneAccess) {
+      return { status: 403, error: 'Accès refusé' };
+    }
+
+    const playlists = await prisma.playlist.findMany({
+      orderBy: { createdAt: 'desc' },
+      include: {
+        owner: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+          },
+        },
+        pinnedBy: {
+          where: { userId },
+          select: { id: true },
+        },
+        tracks: {
+          select: {
+            trackId: true,
+          },
+        },
+        collaborators: {
+          select: {
+            userId: true,
+          },
+        },
+      },
+    });
+
+    const summaries: PlaylistManageableSummaryForTracks[] = [];
+
+    for (const pl of playlists) {
+      const permissions = computePlaylistPermissions({
+        playlistOwnerId: pl.ownerId,
+        userId,
+        role,
+        collaboratorsUserIds: pl.collaborators.map((c) => c.userId),
+      });
+
+      if (!permissions.canEdit) continue;
+
+      const alreadyInCount = pl.tracks.reduce(
+        (acc, t) => acc + (selectedSet.has(t.trackId) ? 1 : 0),
+        0,
+      );
+
+      summaries.push({
+        id: pl.id,
+        name: pl.name,
+        description: pl.description,
+        image: pl.image,
+        ownerId: pl.ownerId,
+        ownerName: pl.owner?.name ?? null,
+        tracksCount: pl.tracks.length,
+        createdAt: pl.createdAt,
+        updatedAt: pl.updatedAt,
+        canEdit: permissions.canEdit,
+        isCollaborator: pl.collaborators.some((c) => c.userId === userId),
+        isPinned: pl.pinnedBy.length > 0,
+        alreadyInCount,
+      });
+    }
+
+    return { status: 200, data: summaries };
+  } catch (error) {
+    const parsed = actionErrorParser(
+      error,
+      'Erreur lors de la récupération des playlists disponibles pour les musiques sélectionnées',
+    );
+    return {
+      status: parsed.status as 400 | 401 | 403 | 404 | 422 | 500,
+      error:
+        typeof parsed.error === 'string'
+          ? parsed.error
+          : 'Erreur lors de la récupération des playlists disponibles pour les musiques sélectionnées',
+    };
+  }
+}
+
 export async function getPlaylist(id: string): Promise<ServerActionResponse<PlaylistWithTracks>> {
   try {
     const session = await getAuthSession();
@@ -763,6 +863,87 @@ export async function addTrackToPlaylist(
         typeof parsed.error === 'string'
           ? parsed.error
           : "Erreur lors de l'ajout de la musique à la playlist",
+    };
+  }
+}
+
+export async function addTracksToPlaylist(
+  playlistId: string,
+  trackIds: string[],
+): Promise<ServerActionResponse<{ addedCount: number; skippedCount: number }>> {
+  try {
+    const session = await getAuthSession();
+    if (!session) {
+      return { status: 401, error: 'Non autorisé' };
+    }
+
+    const validatedPlaylistId = z.string().min(1).parse(playlistId);
+    const validatedTrackIds = z.array(z.string().min(1)).min(1).parse(trackIds);
+    const uniqueTrackIds = Array.from(new Set(validatedTrackIds));
+    if (uniqueTrackIds.length === 0) {
+      return { status: 400, error: 'La liste des musiques est requise' };
+    }
+
+    const role = session.user.role ?? null;
+
+    const playlist = await prisma.playlist.findUnique({
+      where: { id: validatedPlaylistId },
+      include: {
+        tracks: {
+          select: {
+            trackId: true,
+            position: true,
+          },
+        },
+        collaborators: true,
+      },
+    });
+
+    if (!playlist) {
+      return { status: 404, error: 'Playlist introuvable' };
+    }
+
+    const permissions = computePlaylistPermissions({
+      playlistOwnerId: playlist.ownerId,
+      userId: session.user.id,
+      role,
+      collaboratorsUserIds: playlist.collaborators.map((c) => c.userId),
+    });
+
+    if (!permissions.canEdit) {
+      return {
+        status: 403,
+        error: 'Vous ne pouvez modifier que vos propres playlists',
+      };
+    }
+
+    const alreadyInSet = new Set(playlist.tracks.map((t) => t.trackId));
+    const tracksToAdd = uniqueTrackIds.filter((id) => !alreadyInSet.has(id));
+    const skippedCount = uniqueTrackIds.length - tracksToAdd.length;
+
+    if (tracksToAdd.length === 0) {
+      return { status: 200, data: { addedCount: 0, skippedCount } };
+    }
+
+    const maxPosition = playlist.tracks.length === 0 ? 0 : Math.max(...playlist.tracks.map((t) => t.position));
+
+    const data = tracksToAdd.map((trackId, index) => ({
+      playlistId: validatedPlaylistId,
+      trackId,
+      position: maxPosition + 1 + index,
+    }));
+
+    await prisma.playlistTrack.createMany({ data });
+
+    return { status: 200, data: { addedCount: data.length, skippedCount } };
+  } catch (error) {
+    const parsed = actionErrorParser(error, "Erreur lors de l'ajout des musiques à la playlist");
+    return {
+      status: parsed.status as 400 | 401 | 403 | 404 | 422 | 500,
+      error:
+        typeof parsed.error === 'string'
+          ? parsed.error
+          : "Erreur lors de l'ajout des musiques à la playlist",
     };
   }
 }

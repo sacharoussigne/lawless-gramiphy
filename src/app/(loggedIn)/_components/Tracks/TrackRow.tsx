@@ -2,7 +2,7 @@
 
 import { ActionIcon, Button, Card, Checkbox, Group, Menu, Progress, Stack, Text } from '@mantine/core';
 import Link from 'next/link';
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import {
   IconCheck,
   IconCopy,
@@ -47,6 +47,9 @@ type TrackRowProps<TTrack extends TrackShape = TrackShape> = {
   mixSelectMode?: boolean;
   mixSelected?: boolean;
   onMixSelectChange?: (trackId: string, selected: boolean) => void;
+  playlistSelectEnabled?: boolean;
+  playlistSelected?: boolean;
+  onPlaylistSelectChange?: (trackId: string, selected: boolean) => void;
 };
 
 function formatDuration(s: number | null) {
@@ -75,16 +78,22 @@ export default function TrackRow<TTrack extends TrackShape>({
   mixSelectMode = false,
   mixSelected = false,
   onMixSelectChange,
+  playlistSelectEnabled = false,
+  playlistSelected = false,
+  onPlaylistSelectChange,
 }: TrackRowProps<TTrack>) {
   const isActive = currentTrackId === track.id;
   const showProgress = isActive;
   const progressValue = useMemo(() => (showProgress ? progressRatio * 100 : 0), [progressRatio, showProgress]);
+  const [isHovered, setIsHovered] = useState(false);
 
   return (
     <Card
       withBorder
       radius="md"
       p="sm"
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
     >
       <Group align="flex-start" justify="space-between" wrap="nowrap" gap="md">
         <Group align="center" gap="md" style={{ minWidth: 0, flex: 1 }}>
@@ -94,6 +103,22 @@ export default function TrackRow<TTrack extends TrackShape>({
               onChange={(e) => onMixSelectChange?.(track.id, e.currentTarget.checked)}
               aria-label="Sélection pour mix"
             />
+          )}
+          {playlistSelectEnabled && (
+            <div
+              style={{
+                flexShrink: 0,
+                opacity: playlistSelected || isHovered ? 1 : 0,
+                pointerEvents: playlistSelected || isHovered ? 'auto' : 'none',
+                transition: 'opacity 120ms',
+              }}
+            >
+              <Checkbox
+                checked={playlistSelected}
+                onChange={(e) => onPlaylistSelectChange?.(track.id, e.currentTarget.checked)}
+                aria-label="Sélection pour ajout en playlist"
+              />
+            </div>
           )}
           {track.thumbnail ? (
             <Link href={trackHref} style={{ textDecoration: 'none' }}>
