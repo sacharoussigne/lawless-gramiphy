@@ -1,7 +1,7 @@
-import { MAX_MIX_DURATION_SECONDS } from '@/constants/mix';
+import { MAX_MIX_DURATION_SECONDS, MIN_MIX_TRACK_COUNT } from '@/constants/mix';
 import prisma from '@/lib/prisma';
 
-export { MAX_MIX_DURATION_SECONDS };
+export { MAX_MIX_DURATION_SECONDS, MIN_MIX_TRACK_COUNT };
 
 export type ResolvedMixTrack = {
   id: string;
@@ -63,6 +63,9 @@ export async function resolveMixTracksForBuild(options: {
     if (order.length === 0) {
       return { ok: false, status: 400, error: 'Aucune musique à mixer' };
     }
+    if (order.length < MIN_MIX_TRACK_COUNT) {
+      return { ok: false, status: 422, error: 'Un mix doit contenir au moins 2 musiques' };
+    }
 
     const orderedTracks: ResolvedMixTrack[] = [];
     for (const id of order) {
@@ -86,8 +89,8 @@ export async function resolveMixTracksForBuild(options: {
     return { ok: true, orderedTracks, playlistId, totalSeconds };
   }
 
-  if (rawIds.length === 0) {
-    return { ok: false, status: 400, error: 'Sélectionne au moins une musique' };
+  if (rawIds.length < MIN_MIX_TRACK_COUNT) {
+    return { ok: false, status: 400, error: 'Sélectionne au moins 2 musiques' };
   }
 
   const tracks = await prisma.track.findMany({

@@ -4,7 +4,6 @@ import {
   Alert,
   Avatar,
   Button,
-  Card,
   Group,
   Loader,
   Stack,
@@ -22,6 +21,7 @@ import {
   IconPlaylist,
   IconPin,
   IconPinnedOff,
+  IconStack2,
 } from '@tabler/icons-react';
 import { useRouter } from 'next/navigation';
 import {
@@ -34,7 +34,7 @@ import { notifications } from '@mantine/notifications';
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { routes } from '@/types/routes';
-import { MAX_MIX_DURATION_SECONDS } from '@/constants/mix';
+import { MAX_MIX_DURATION_SECONDS, MIN_MIX_TRACK_COUNT } from '@/constants/mix';
 import CollaboratorsModal from './_components/CollaboratorsModal';
 import TrackRow from '../../../_components/Tracks/TrackRow';
 import useSingleAudioPlayer from '../../../_components/Tracks/useSingleAudioPlayer';
@@ -89,6 +89,7 @@ export default function PlaylistDetailsPageClient({ playlist }: PlaylistDetailsP
   const [mixJobId, setMixJobId] = useState<string | null>(null);
   const [mixBusy, setMixBusy] = useState(false);
   const [lastMixUrl, setLastMixUrl] = useState<string | null>(null);
+  const [mixMode, setMixMode] = useState(false);
   const [collaboratorsModalOpen, setCollaboratorsModalOpen] = useState(false);
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [pinLoading, setPinLoading] = useState(false);
@@ -134,6 +135,9 @@ export default function PlaylistDetailsPageClient({ playlist }: PlaylistDetailsP
   );
 
   const mixOverLimit = mixTotalSeconds > MAX_MIX_DURATION_SECONDS;
+  const mixEffectiveTrackCount =
+    mixTrackIds.length > 0 ? mixTrackIds.length : orderedPlaylistIds.length;
+  const mixTooFewTracks = mixEffectiveTrackCount < MIN_MIX_TRACK_COUNT;
   const mixTrackIdSet = useMemo(() => new Set(mixTrackIds), [mixTrackIds]);
 
   const handleMixSelectChange = (trackId: string, selected: boolean) => {
@@ -148,6 +152,11 @@ export default function PlaylistDetailsPageClient({ playlist }: PlaylistDetailsP
 
   const selectAllMixTracks = () => setMixTrackIds(orderedPlaylistIds);
   const clearMixTracks = () => setMixTrackIds([]);
+
+  const exitMixMode = () => {
+    setMixMode(false);
+    setMixTrackIds([]);
+  };
 
   const handleBuildMix = async () => {
     if (orderedPlaylistIds.length === 0) return;
@@ -198,7 +207,7 @@ export default function PlaylistDetailsPageClient({ playlist }: PlaylistDetailsP
           await navigator.clipboard.writeText(data.s3Url);
           notifications.show({
             title: 'Mix prêt',
-            message: 'Lien S3 copié dans le presse-papiers',
+            message: 'Lien du mix copié dans le presse-papiers',
             color: 'green',
           });
         } else if (data.status === 'error') {
@@ -376,6 +385,17 @@ export default function PlaylistDetailsPageClient({ playlist }: PlaylistDetailsP
           >
             Bibliothèque
           </Button>
+          {playlist.tracks.length >= MIN_MIX_TRACK_COUNT && !mixMode && (
+            <Button
+              size="xs"
+              variant="light"
+              color="violet"
+              leftSection={<IconStack2 size={14} />}
+              onClick={() => setMixMode(true)}
+            >
+              Créer un mix
+            </Button>
+          )}
         </Group>
       </Group>
 
@@ -385,20 +405,18 @@ export default function PlaylistDetailsPageClient({ playlist }: PlaylistDetailsP
         </Alert>
       )}
 
-      {playlist.tracks.length > 0 && (
-        <Card withBorder radius="md" p="sm">
+      {playlist.tracks.length >= MIN_MIX_TRACK_COUNT && mixMode && (
+        <Alert variant="light" color="violet" icon={<IconStack2 size={18} />} title="Mode mix">
           <Stack gap="sm">
             <Group justify="space-between" align="flex-start" wrap="wrap" gap="sm">
-              <Stack gap={4}>
-                <Text fw={600} size="sm">
-                  Mix pour le jeu (S3)
-                </Text>
-                <Text size="xs" c="dimmed">
-                  Coche des pistes pour un sous-ensemble, ou laisse tout décoché pour utiliser toute la playlist dans
-                  l’ordre. Max {Math.floor(MAX_MIX_DURATION_SECONDS / 60)} min.
-                </Text>
-              </Stack>
+              <Text size="xs" c="dimmed">
+                Coche des pistes pour un sous-ensemble (min. 2), ou laisse tout décoché pour toute la playlist dans
+                l’ordre (min. 2 musiques au total). Max {Math.floor(MAX_MIX_DURATION_SECONDS / 60)} min.
+              </Text>
               <Group gap="xs">
+                <Button size="xs" variant="default" onClick={exitMixMode}>
+                  Quitter
+                </Button>
                 <Button size="xs" variant="default" onClick={selectAllMixTracks}>
                   Tout sélectionner
                 </Button>
@@ -409,7 +427,16 @@ export default function PlaylistDetailsPageClient({ playlist }: PlaylistDetailsP
             </Group>
             <Group gap="md" align="center" wrap="wrap">
               <Text size="sm">
-                Durée estimée :{' '}
+                {mixTrackIds.length === 0 ? (
+                  <>
+                    Toute la playlist ({orderedPlaylistIds.length} piste{orderedPlaylistIds.length > 1 ? 's' : ''}) · durée
+                    estimée :{' '}
+                  </>
+                ) : (
+                  <>
+                    Sélection ({mixTrackIds.length} piste{mixTrackIds.length > 1 ? 's' : ''}) · durée estimée :{' '}
+                  </>
+                )}
                 <Text span fw={600}>
                   {Math.floor(mixTotalSeconds / 60)}:{(mixTotalSeconds % 60).toString().padStart(2, '0')}
                 </Text>
@@ -419,6 +446,11 @@ export default function PlaylistDetailsPageClient({ playlist }: PlaylistDetailsP
                   </Text>
                 )}
               </Text>
+              {mixTooFewTracks && (
+                <Text size="xs" c="orange">
+                  Il faut au moins {MIN_MIX_TRACK_COUNT} musiques pour un mix (sélection ou playlist entière).
+                </Text>
+              )}
               {hasUnknownMixDuration && (
                 <Text size="xs" c="orange">
                   Certaines durées sont inconnues : la génération peut échouer.
@@ -428,13 +460,18 @@ export default function PlaylistDetailsPageClient({ playlist }: PlaylistDetailsP
             <Group gap="xs" align="center">
               <Button
                 size="sm"
+                color="violet"
                 onClick={() => void handleBuildMix()}
                 disabled={
-                  mixBusy || orderedPlaylistIds.length === 0 || mixOverLimit || hasUnknownMixDuration
+                  mixBusy ||
+                  orderedPlaylistIds.length < MIN_MIX_TRACK_COUNT ||
+                  mixTooFewTracks ||
+                  mixOverLimit ||
+                  hasUnknownMixDuration
                 }
                 leftSection={mixBusy ? <Loader size={14} color="white" /> : undefined}
               >
-                {mixBusy ? 'Génération…' : 'Générer et copier le lien S3'}
+                {mixBusy ? 'Génération…' : 'Générer et copier le lien'}
               </Button>
               {lastMixUrl && (
                 <Button
@@ -442,19 +479,15 @@ export default function PlaylistDetailsPageClient({ playlist }: PlaylistDetailsP
                   variant="light"
                   onClick={() => {
                     void navigator.clipboard.writeText(lastMixUrl);
-                    notifications.show({ title: 'Copié', message: 'Lien S3 copié', color: 'blue' });
+                    notifications.show({ title: 'Copié', message: 'Lien du mix copié', color: 'blue' });
                   }}
                 >
                   Recopier le dernier lien
                 </Button>
               )}
             </Group>
-            <Text size="xs" c="dimmed">
-              Expiration S3 : configure une règle de cycle de vie sur le préfixe <code>mixes/</code> (ex. suppression
-              après 1 jour). Voir <code>docs/s3-mix-lifecycle.md</code>.
-            </Text>
           </Stack>
-        </Card>
+        </Alert>
       )}
 
       <CollaboratorsModal
@@ -528,7 +561,7 @@ export default function PlaylistDetailsPageClient({ playlist }: PlaylistDetailsP
                 deleting={removingId === track.id}
                 showAddToPlaylist={false}
                 removeActionLabel="Retirer"
-                mixSelectMode
+                mixSelectMode={mixMode}
                 mixSelected={mixTrackIdSet.has(track.id)}
                 onMixSelectChange={handleMixSelectChange}
               />

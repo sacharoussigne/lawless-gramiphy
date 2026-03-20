@@ -25,6 +25,7 @@ import {
   IconSearch,
   IconCheck,
   IconSquare,
+  IconStack2,
 } from '@tabler/icons-react';
 import TrackRow from '../../_components/Tracks/TrackRow';
 import AddToPlaylistModal from '../../_components/Tracks/AddToPlaylistModal';
@@ -34,7 +35,7 @@ import { handleAction } from '@/lib/action';
 import { notifications } from '@mantine/notifications';
 import Link from 'next/link';
 import { routes } from '@/types/routes';
-import { MAX_MIX_DURATION_SECONDS } from '@/constants/mix';
+import { MAX_MIX_DURATION_SECONDS, MIN_MIX_TRACK_COUNT } from '@/constants/mix';
 
 type Track = {
   id: string;
@@ -81,6 +82,7 @@ export default function LibraryPageClient({ initialTracks }: LibraryPageClientPr
   const [mixJobId, setMixJobId] = useState<string | null>(null);
   const [mixBusy, setMixBusy] = useState(false);
   const [lastMixUrl, setLastMixUrl] = useState<string | null>(null);
+  const [mixMode, setMixMode] = useState(false);
   const urlInputRef = useRef<HTMLInputElement | null>(null);
 
   const libraryTrackById = useMemo(() => new Map(initialTracks.map((t) => [t.id, t])), [initialTracks]);
@@ -109,8 +111,13 @@ export default function LibraryPageClient({ initialTracks }: LibraryPageClientPr
 
   const clearMixTracks = () => setMixTrackIds([]);
 
+  const exitMixMode = () => {
+    setMixMode(false);
+    setMixTrackIds([]);
+  };
+
   const handleBuildMix = async () => {
-    if (mixTrackIds.length === 0) return;
+    if (mixTrackIds.length < MIN_MIX_TRACK_COUNT) return;
     setMixBusy(true);
     setLastMixUrl(null);
     try {
@@ -155,7 +162,7 @@ export default function LibraryPageClient({ initialTracks }: LibraryPageClientPr
           await navigator.clipboard.writeText(data.s3Url);
           notifications.show({
             title: 'Mix prêt',
-            message: 'Lien S3 copié dans le presse-papiers',
+            message: 'Lien du mix copié dans le presse-papiers',
             color: 'green',
           });
         } else if (data.status === 'error') {
@@ -492,6 +499,17 @@ export default function LibraryPageClient({ initialTracks }: LibraryPageClientPr
             >
               Ajouter
             </Button>
+            {filteredTracks.length >= MIN_MIX_TRACK_COUNT && !mixMode && (
+              <Button
+                size="sm"
+                variant="light"
+                color="violet"
+                leftSection={<IconStack2 size={16} />}
+                onClick={() => setMixMode(true)}
+              >
+                Créer un mix
+              </Button>
+            )}
           </Group>
         </Group>
 
@@ -551,76 +569,102 @@ export default function LibraryPageClient({ initialTracks }: LibraryPageClientPr
             </Group>
           </Card>
 
-          {filteredTracks.length > 0 && (
-            <Card withBorder radius="md" p="sm">
+          {mixMode && initialTracks.length >= MIN_MIX_TRACK_COUNT && (
+            <Alert variant="light" color="violet" icon={<IconStack2 size={18} />} title="Mode mix">
               <Stack gap="sm">
-                <Group justify="space-between" align="flex-start" wrap="wrap" gap="sm">
-                  <Stack gap={4}>
-                    <Text fw={600} size="sm">
-                      Mix pour le jeu (S3)
+                {filteredTracks.length === 0 ? (
+                  <Group justify="space-between" wrap="wrap" gap="sm">
+                    <Text size="sm" c="dimmed">
+                      Aucune musique ne correspond aux filtres. Ajuste la recherche ou quitte le mode mix.
                     </Text>
-                    <Text size="xs" c="dimmed">
-                      Sélectionne au moins une musique. Ordre = ordre de sélection. Max{' '}
-                      {Math.floor(MAX_MIX_DURATION_SECONDS / 60)} min.
-                    </Text>
-                  </Stack>
-                  <Group gap="xs">
-                    <Button size="xs" variant="default" onClick={selectFilteredForMix}>
-                      Sélectionner la liste filtrée
-                    </Button>
-                    <Button size="xs" variant="subtle" onClick={clearMixTracks}>
-                      Effacer
+                    <Button size="xs" variant="default" onClick={exitMixMode}>
+                      Quitter
                     </Button>
                   </Group>
-                </Group>
-                <Group gap="md" align="center" wrap="wrap">
-                  <Text size="sm">
-                    Sélection : {mixTrackIds.length} · Durée estimée :{' '}
-                    <Text span fw={600}>
-                      {Math.floor(mixTotalSeconds / 60)}:{(mixTotalSeconds % 60).toString().padStart(2, '0')}
+                ) : filteredTracks.length < MIN_MIX_TRACK_COUNT ? (
+                  <Group justify="space-between" wrap="wrap" gap="sm">
+                    <Text size="sm" c="dimmed">
+                      Il faut au moins {MIN_MIX_TRACK_COUNT} musiques dans la liste affichée pour un mix. Élargis les
+                      filtres ou quitte le mode mix.
                     </Text>
-                    {mixOverLimit && (
-                      <Text span c="red" ml="xs">
-                        (dépasse la limite)
-                      </Text>
-                    )}
-                  </Text>
-                  {hasUnknownMixDuration && (
-                    <Text size="xs" c="orange">
-                      Durée inconnue sur au moins une piste : la génération peut échouer.
-                    </Text>
-                  )}
-                </Group>
-                <Group gap="xs" align="center">
-                  <Button
-                    size="sm"
-                    onClick={() => void handleBuildMix()}
-                    disabled={
-                      mixBusy || mixTrackIds.length === 0 || mixOverLimit || hasUnknownMixDuration
-                    }
-                    leftSection={mixBusy ? <Loader size={14} color="white" /> : undefined}
-                  >
-                    {mixBusy ? 'Génération…' : 'Générer et copier le lien S3'}
-                  </Button>
-                  {lastMixUrl && (
-                    <Button
-                      size="xs"
-                      variant="light"
-                      onClick={() => {
-                        void navigator.clipboard.writeText(lastMixUrl);
-                        notifications.show({ title: 'Copié', message: 'Lien S3 copié', color: 'blue' });
-                      }}
-                    >
-                      Recopier le dernier lien
+                    <Button size="xs" variant="default" onClick={exitMixMode}>
+                      Quitter
                     </Button>
-                  )}
-                </Group>
-                <Text size="xs" c="dimmed">
-                  Expiration S3 : règle de cycle de vie sur le préfixe <code>mixes/</code> — voir{' '}
-                  <code>docs/s3-mix-lifecycle.md</code>.
-                </Text>
+                  </Group>
+                ) : (
+                  <>
+                    <Group justify="space-between" align="flex-start" wrap="wrap" gap="sm">
+                      <Text size="xs" c="dimmed">
+                        Sélectionne au moins {MIN_MIX_TRACK_COUNT} musiques. Ordre = ordre de sélection. Max{' '}
+                        {Math.floor(MAX_MIX_DURATION_SECONDS / 60)} min.
+                      </Text>
+                      <Group gap="xs">
+                        <Button size="xs" variant="default" onClick={exitMixMode}>
+                          Quitter
+                        </Button>
+                        <Button size="xs" variant="default" onClick={selectFilteredForMix}>
+                          Tout sélectionner
+                        </Button>
+                        <Button size="xs" variant="subtle" onClick={clearMixTracks}>
+                          Effacer
+                        </Button>
+                      </Group>
+                    </Group>
+                    <Group gap="md" align="center" wrap="wrap">
+                      <Text size="sm">
+                        Sélection : {mixTrackIds.length} · Durée estimée :{' '}
+                        <Text span fw={600}>
+                          {Math.floor(mixTotalSeconds / 60)}:{(mixTotalSeconds % 60).toString().padStart(2, '0')}
+                        </Text>
+                        {mixOverLimit && (
+                          <Text span c="red" ml="xs">
+                            (dépasse la limite)
+                          </Text>
+                        )}
+                      </Text>
+                      {mixTrackIds.length > 0 && mixTrackIds.length < MIN_MIX_TRACK_COUNT && (
+                        <Text size="xs" c="orange">
+                          Sélectionne encore des musiques : il en faut au moins {MIN_MIX_TRACK_COUNT}.
+                        </Text>
+                      )}
+                      {hasUnknownMixDuration && (
+                        <Text size="xs" c="orange">
+                          Durée inconnue sur au moins une piste : la génération peut échouer.
+                        </Text>
+                      )}
+                    </Group>
+                    <Group gap="xs" align="center">
+                      <Button
+                        size="sm"
+                        color="violet"
+                        onClick={() => void handleBuildMix()}
+                        disabled={
+                          mixBusy ||
+                          mixTrackIds.length < MIN_MIX_TRACK_COUNT ||
+                          mixOverLimit ||
+                          hasUnknownMixDuration
+                        }
+                        leftSection={mixBusy ? <Loader size={14} color="white" /> : undefined}
+                      >
+                        {mixBusy ? 'Génération…' : 'Générer et copier le lien'}
+                      </Button>
+                      {lastMixUrl && (
+                        <Button
+                          size="xs"
+                          variant="light"
+                          onClick={() => {
+                            void navigator.clipboard.writeText(lastMixUrl);
+                            notifications.show({ title: 'Copié', message: 'Lien du mix copié', color: 'blue' });
+                          }}
+                        >
+                          Recopier le dernier lien
+                        </Button>
+                      )}
+                    </Group>
+                  </>
+                )}
               </Stack>
-            </Card>
+            </Alert>
           )}
 
           {filteredTracks.length === 0 ? (
@@ -658,7 +702,7 @@ export default function LibraryPageClient({ initialTracks }: LibraryPageClientPr
                   onOpenAddToPlaylistMenu={(t) => void openAddToPlaylistMenu(t as any)}
                   onDeleteTrack={(t) => void handleDelete(t as any)}
                   deleting={deletingId === track.id}
-                  mixSelectMode
+                  mixSelectMode={mixMode}
                   mixSelected={mixTrackIdSet.has(track.id)}
                   onMixSelectChange={handleMixSelectChange}
                 />
