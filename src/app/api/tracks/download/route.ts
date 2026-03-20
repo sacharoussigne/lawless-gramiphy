@@ -202,7 +202,8 @@ export async function POST(request: NextRequest) {
         // Upload
         setJob(jobId, { status: 'uploading', message: 'Upload en cours…', child: null });
 
-        const s3Key = `tracks/${youtubeId}.mp3`;
+        const tracksPrefix = (process.env.TRACKS_S3_PREFIX ?? 'tracks').replace(/^\/+|\/+$/g, '');
+        const s3Key = `${tracksPrefix}/${youtubeId}.mp3`;
         const fileBuffer = fs.readFileSync(mp3Path);
         const fileSizeMb = Math.round((fileBuffer.byteLength / (1024 * 1024)) * 10_000) / 10_000;
         await s3.send(

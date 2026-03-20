@@ -68,7 +68,8 @@ export async function runExportedMixJob(options: {
   const mixId = createHash('sha256')
     .update(`${userId}:${orderedTracks.map((t) => t.id).join('|')}`)
     .digest('hex');
-  const s3Key = `mixes/${mixId}.mp3`;
+  const mixesPrefix = (process.env.MIXES_S3_PREFIX ?? 'mixes').replace(/^\/+|\/+$/g, '');
+  const s3Key = `${mixesPrefix}/${mixId}.mp3`;
   const s3Url = `https://${bucket}.s3.${region}.amazonaws.com/${s3Key}`;
 
   const expiresAfterMs = 23 * 60 * 60 * 1000;
