@@ -341,7 +341,7 @@ export default function PlaylistDetailsPageClient({ playlist }: PlaylistDetailsP
             <ActionIcon
               size="lg"
               variant={playlist.isPinned ? 'filled' : 'subtle'}
-              color={playlist.isPinned ? 'blue' : 'gray'}
+              color={playlist.isPinned ? 'green' : 'gray'}
               loading={pinLoading}
               onClick={() => void handleTogglePin()}
               aria-label={playlist.isPinned ? 'Désépingler la playlist' : 'Épingler la playlist'}

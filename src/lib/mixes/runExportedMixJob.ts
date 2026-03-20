@@ -1,11 +1,11 @@
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
-import { randomUUID } from 'crypto';
+import { createHash } from 'crypto';
 import { pipeline } from 'stream/promises';
 import type { Readable } from 'stream';
 import { spawn } from 'child_process';
-import { S3Client, DeleteObjectCommand, GetObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3';
+import { DeleteObjectCommand, GetObjectCommand, HeadObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
 
 import prisma from '@/lib/prisma';
 import { buildFfmpegLocalConcatArgs } from '@/lib/mixes/ffmpegConcatArgs';
@@ -62,9 +62,99 @@ export async function runExportedMixJob(options: {
   const { jobId, userId, playlistId, orderedTracks, totalSeconds } = options;
   const bucket = process.env.AWS_S3_BUCKET!;
   const region = process.env.AWS_REGION!;
+
+  // Mix signature stable for a user + ordered trackIds.
+  // This allows overwriting the same S3 key to "renew" the object without breaking URLs.
+  const mixId = createHash('sha256')
+    .update(`${userId}:${orderedTracks.map((t) => t.id).join('|')}`)
+    .digest('hex');
+  const s3Key = `mixes/${mixId}.mp3`;
+  const s3Url = `https://${bucket}.s3.${region}.amazonaws.com/${s3Key}`;
+
+  const expiresAfterMs = 23 * 60 * 60 * 1000;
+  const now = Date.now();
+
+  let mixObjectExistsInS3 = false;
+  let s3ContentLengthBytes: number | null = null;
+  try {
+    const existingMix = await prisma.exportedMix.findUnique({ where: { id: mixId } });
+
+    // If a record exists, check whether the object is still available in S3.
+    if (existingMix) {
+      try {
+        const head = await s3.send(new HeadObjectCommand({ Bucket: bucket, Key: s3Key }));
+        mixObjectExistsInS3 = true;
+        s3ContentLengthBytes = head.ContentLength ?? null;
+      } catch {
+        // ignore (S3 might have already expired/deleted)
+      }
+    }
+
+    // Renewal path: existing mix is recent enough and the object still exists.
+    if (existingMix && mixObjectExistsInS3 && existingMix.createdAt.getTime() > now - expiresAfterMs) {
+      if (!getMixJob(jobId) || getMixJob(jobId)?.status === 'canceled') return;
+
+      // PUT "touch": re-upload the same object body to the same key (no delete).
+      // S3 streaming PUT can fail when decoded content-length can't be inferred.
+      // To keep renewal reliable, we download to a temp file then PUT from buffer.
+      const renewTmpPath = path.join(os.tmpdir(), `gramiphy-mix-renew-${mixId}.mp3`);
+      try {
+        await downloadTrackToFile(bucket, s3Key, renewTmpPath);
+        const fileBuffer = fs.readFileSync(renewTmpPath);
+
+        await s3.send(
+          new PutObjectCommand({
+            Bucket: bucket,
+            Key: s3Key,
+            Body: fileBuffer,
+            ContentType: 'audio/mpeg',
+          }),
+        );
+      } finally {
+        try {
+          fs.rmSync(renewTmpPath, { force: true });
+        } catch {
+          // ignore
+        }
+      }
+
+      const fileSizeMb =
+        s3ContentLengthBytes != null ? Math.round((s3ContentLengthBytes / (1024 * 1024)) * 10_000) / 10_000 : existingMix.fileSizeMb;
+
+      await prisma.exportedMix.update({
+        where: { id: mixId },
+        data: {
+          s3Key,
+          s3Url,
+          totalDurationSeconds: totalSeconds,
+          fileSizeMb,
+          playlistId,
+          trackIds: orderedTracks.map((t) => t.id),
+          createdAt: new Date(),
+        },
+      });
+
+      setMixJob(jobId, {
+        status: 'done',
+        message: 'Terminé',
+        s3Url,
+        child: null,
+      });
+
+      setTimeout(() => removeMixJob(jobId), 120_000);
+      return;
+    }
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : 'Erreur mix';
+    setMixJob(jobId, { status: 'error', message: msg, error: msg, child: null });
+    setTimeout(() => removeMixJob(jobId), 120_000);
+    return;
+  }
+
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'gramiphy-mix-'));
   const localPaths: string[] = [];
-  let pendingS3KeyToDelete: string | null = null;
+  // Avoid deleting a stable S3 key if it existed before our overwrite.
+  let pendingS3KeyToDelete: string | null = mixObjectExistsInS3 ? null : s3Key;
 
   const assertNotCanceled = () => {
     const j = getMixJob(jobId);
@@ -103,8 +193,6 @@ export async function runExportedMixJob(options: {
 
     setMixJob(jobId, { status: 'uploading', message: 'Upload S3…' });
 
-    const mixId = randomUUID();
-    const s3Key = `mixes/${mixId}.mp3`;
     const fileBuffer = fs.readFileSync(outPath);
     const fileSizeMb = Math.round((fileBuffer.byteLength / (1024 * 1024)) * 10_000) / 10_000;
 
@@ -116,12 +204,19 @@ export async function runExportedMixJob(options: {
         ContentType: 'audio/mpeg',
       }),
     );
-    pendingS3KeyToDelete = s3Key;
 
-    const s3Url = `https://${bucket}.s3.${region}.amazonaws.com/${s3Key}`;
-
-    await prisma.exportedMix.create({
-      data: {
+    await prisma.exportedMix.upsert({
+      where: { id: mixId },
+      update: {
+        s3Key,
+        s3Url,
+        totalDurationSeconds: totalSeconds,
+        fileSizeMb,
+        playlistId,
+        trackIds: orderedTracks.map((t) => t.id),
+        createdAt: new Date(),
+      },
+      create: {
         id: mixId,
         s3Key,
         s3Url,
@@ -132,15 +227,20 @@ export async function runExportedMixJob(options: {
         trackIds: orderedTracks.map((t) => t.id),
       },
     });
+
     pendingS3KeyToDelete = null;
 
     if (!assertNotCanceled()) {
-      try {
-        await s3.send(new DeleteObjectCommand({ Bucket: bucket, Key: s3Key }));
-      } catch {
-        // ignore
+      // If the stable key existed before, don't delete on cancel:
+      // we want to avoid breaking any existing links/objects.
+      if (!mixObjectExistsInS3) {
+        try {
+          await s3.send(new DeleteObjectCommand({ Bucket: bucket, Key: s3Key }));
+        } catch {
+          // ignore
+        }
+        await prisma.exportedMix.delete({ where: { id: mixId } }).catch(() => {});
       }
-      await prisma.exportedMix.delete({ where: { id: mixId } }).catch(() => {});
       return;
     }
 

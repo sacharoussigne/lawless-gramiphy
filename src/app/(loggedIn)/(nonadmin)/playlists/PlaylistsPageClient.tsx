@@ -303,7 +303,7 @@ export default function PlaylistsPageClient({
                     <Tooltip label={pl.isPinned ? 'Désépingler' : 'Épingler'} withArrow>
                       <ActionIcon
                         variant={pl.isPinned ? 'filled' : 'subtle'}
-                        color={pl.isPinned ? 'blue' : 'gray'}
+                        color={pl.isPinned ? 'green' : 'gray'}
                         loading={pinLoadingId === pl.id}
                         onClick={(event) => {
                           event.preventDefault();
