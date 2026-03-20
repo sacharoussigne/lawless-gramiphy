@@ -34,6 +34,7 @@ import { handleAction } from '@/lib/action';
 import { notifications } from '@mantine/notifications';
 import Link from 'next/link';
 import { routes } from '@/types/routes';
+import { MAX_MIX_DURATION_SECONDS } from '@/constants/mix';
 
 type Track = {
   id: string;
@@ -41,6 +42,7 @@ type Track = {
   artist: string | null;
   youtubeUrl: string;
   s3Url: string;
+  fileSizeMb: number | null;
   duration: number | null;
   thumbnail: string | null;
   uploaderId: string | null;
@@ -75,7 +77,107 @@ export default function LibraryPageClient({ initialTracks }: LibraryPageClientPr
   const [uploaderFilter, setUploaderFilter] = useState<string | null>(null);
   const [sortBy, setSortBy] = useState<'date_desc' | 'date_asc' | 'title' | 'artist'>('date_desc');
   const [addToPlaylistTrack, setAddToPlaylistTrack] = useState<Track | null>(null);
+  const [mixTrackIds, setMixTrackIds] = useState<string[]>([]);
+  const [mixJobId, setMixJobId] = useState<string | null>(null);
+  const [mixBusy, setMixBusy] = useState(false);
+  const [lastMixUrl, setLastMixUrl] = useState<string | null>(null);
   const urlInputRef = useRef<HTMLInputElement | null>(null);
+
+  const libraryTrackById = useMemo(() => new Map(initialTracks.map((t) => [t.id, t])), [initialTracks]);
+
+  const mixTotalSeconds = useMemo(() => {
+    return mixTrackIds.reduce((acc, id) => acc + (libraryTrackById.get(id)?.duration ?? 0), 0);
+  }, [mixTrackIds, libraryTrackById]);
+
+  const hasUnknownMixDuration = useMemo(
+    () => mixTrackIds.some((id) => libraryTrackById.get(id)?.duration == null),
+    [mixTrackIds, libraryTrackById],
+  );
+
+  const mixOverLimit = mixTotalSeconds > MAX_MIX_DURATION_SECONDS;
+  const mixTrackIdSet = useMemo(() => new Set(mixTrackIds), [mixTrackIds]);
+
+  const handleMixSelectChange = (trackId: string, selected: boolean) => {
+    setMixTrackIds((prev) => {
+      if (selected) {
+        if (prev.includes(trackId)) return prev;
+        return [...prev, trackId];
+      }
+      return prev.filter((id) => id !== trackId);
+    });
+  };
+
+  const clearMixTracks = () => setMixTrackIds([]);
+
+  const handleBuildMix = async () => {
+    if (mixTrackIds.length === 0) return;
+    setMixBusy(true);
+    setLastMixUrl(null);
+    try {
+      const res = await fetch('/api/mixes/build', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ trackIds: mixTrackIds }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(typeof json?.error === 'string' ? json.error : 'Impossible de créer le mix');
+      }
+      const jobId = json?.data?.jobId as string | undefined;
+      if (!jobId) throw new Error('Réponse serveur invalide');
+      setMixJobId(jobId);
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : 'Erreur inconnue';
+      notifications.show({ title: 'Erreur', message, color: 'red' });
+      setMixBusy(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!mixJobId) return;
+
+    let cancelled = false;
+    const interval = window.setInterval(async () => {
+      try {
+        const res = await fetch(`/api/mixes/build?jobId=${encodeURIComponent(mixJobId)}`, {
+          credentials: 'include',
+        });
+        const json = await res.json().catch(() => ({}));
+        const data = json?.data;
+        if (!data || cancelled) return;
+
+        if (data.status === 'done' && data.s3Url) {
+          window.clearInterval(interval);
+          setMixBusy(false);
+          setMixJobId(null);
+          setLastMixUrl(data.s3Url);
+          await navigator.clipboard.writeText(data.s3Url);
+          notifications.show({
+            title: 'Mix prêt',
+            message: 'Lien S3 copié dans le presse-papiers',
+            color: 'green',
+          });
+        } else if (data.status === 'error') {
+          window.clearInterval(interval);
+          setMixBusy(false);
+          setMixJobId(null);
+          notifications.show({
+            title: 'Erreur',
+            message: data.error || data.message || 'Échec du mix',
+            color: 'red',
+          });
+        }
+      } catch {
+        // ignore
+      }
+    }, 800);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
+  }, [mixJobId]);
 
   const openSpotlight = () => {
     if (loading) return;
@@ -192,6 +294,8 @@ export default function LibraryPageClient({ initialTracks }: LibraryPageClientPr
 
     return list;
   }, [initialTracks, search, uploaderFilter, sortBy]);
+
+  const selectFilteredForMix = () => setMixTrackIds(filteredTracks.map((t) => t.id));
 
   const handleDownload = async () => {
     if (!url.trim()) return;
@@ -447,6 +551,78 @@ export default function LibraryPageClient({ initialTracks }: LibraryPageClientPr
             </Group>
           </Card>
 
+          {filteredTracks.length > 0 && (
+            <Card withBorder radius="md" p="sm">
+              <Stack gap="sm">
+                <Group justify="space-between" align="flex-start" wrap="wrap" gap="sm">
+                  <Stack gap={4}>
+                    <Text fw={600} size="sm">
+                      Mix pour le jeu (S3)
+                    </Text>
+                    <Text size="xs" c="dimmed">
+                      Sélectionne au moins une musique. Ordre = ordre de sélection. Max{' '}
+                      {Math.floor(MAX_MIX_DURATION_SECONDS / 60)} min.
+                    </Text>
+                  </Stack>
+                  <Group gap="xs">
+                    <Button size="xs" variant="default" onClick={selectFilteredForMix}>
+                      Sélectionner la liste filtrée
+                    </Button>
+                    <Button size="xs" variant="subtle" onClick={clearMixTracks}>
+                      Effacer
+                    </Button>
+                  </Group>
+                </Group>
+                <Group gap="md" align="center" wrap="wrap">
+                  <Text size="sm">
+                    Sélection : {mixTrackIds.length} · Durée estimée :{' '}
+                    <Text span fw={600}>
+                      {Math.floor(mixTotalSeconds / 60)}:{(mixTotalSeconds % 60).toString().padStart(2, '0')}
+                    </Text>
+                    {mixOverLimit && (
+                      <Text span c="red" ml="xs">
+                        (dépasse la limite)
+                      </Text>
+                    )}
+                  </Text>
+                  {hasUnknownMixDuration && (
+                    <Text size="xs" c="orange">
+                      Durée inconnue sur au moins une piste : la génération peut échouer.
+                    </Text>
+                  )}
+                </Group>
+                <Group gap="xs" align="center">
+                  <Button
+                    size="sm"
+                    onClick={() => void handleBuildMix()}
+                    disabled={
+                      mixBusy || mixTrackIds.length === 0 || mixOverLimit || hasUnknownMixDuration
+                    }
+                    leftSection={mixBusy ? <Loader size={14} color="white" /> : undefined}
+                  >
+                    {mixBusy ? 'Génération…' : 'Générer et copier le lien S3'}
+                  </Button>
+                  {lastMixUrl && (
+                    <Button
+                      size="xs"
+                      variant="light"
+                      onClick={() => {
+                        void navigator.clipboard.writeText(lastMixUrl);
+                        notifications.show({ title: 'Copié', message: 'Lien S3 copié', color: 'blue' });
+                      }}
+                    >
+                      Recopier le dernier lien
+                    </Button>
+                  )}
+                </Group>
+                <Text size="xs" c="dimmed">
+                  Expiration S3 : règle de cycle de vie sur le préfixe <code>mixes/</code> — voir{' '}
+                  <code>docs/s3-mix-lifecycle.md</code>.
+                </Text>
+              </Stack>
+            </Card>
+          )}
+
           {filteredTracks.length === 0 ? (
             <Stack gap="xs" align="center" py="xl">
               <Text c="dimmed" ta="center">
@@ -482,6 +658,9 @@ export default function LibraryPageClient({ initialTracks }: LibraryPageClientPr
                   onOpenAddToPlaylistMenu={(t) => void openAddToPlaylistMenu(t as any)}
                   onDeleteTrack={(t) => void handleDelete(t as any)}
                   deleting={deletingId === track.id}
+                  mixSelectMode
+                  mixSelected={mixTrackIdSet.has(track.id)}
+                  onMixSelectChange={handleMixSelectChange}
                 />
               ))}
             </Stack>

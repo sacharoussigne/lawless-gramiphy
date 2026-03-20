@@ -161,15 +161,6 @@ export async function POST(request: NextRequest) {
 
         const meta = JSON.parse(metaRaw);
 
-        if (meta.title) {
-          const existingByTitle = await prisma.track.findFirst({
-            where: { title: { equals: meta.title, mode: 'insensitive' } },
-          });
-          if (existingByTitle) {
-            throw new Error('Une musique avec ce nom existe déjà dans la bibliothèque');
-          }
-        }
-
         // Download / convert
         setJob(jobId, { status: 'downloading', message: 'Téléchargement en cours…' });
         const dlArgs = [
@@ -213,6 +204,7 @@ export async function POST(request: NextRequest) {
 
         const s3Key = `tracks/${youtubeId}.mp3`;
         const fileBuffer = fs.readFileSync(mp3Path);
+        const fileSizeMb = Math.round((fileBuffer.byteLength / (1024 * 1024)) * 10_000) / 10_000;
         await s3.send(
           new PutObjectCommand({
             Bucket: process.env.AWS_S3_BUCKET!,
@@ -232,6 +224,7 @@ export async function POST(request: NextRequest) {
             youtubeId,
             s3Key,
             s3Url,
+            fileSizeMb,
             duration: meta.duration ?? null,
             thumbnail: meta.thumbnail ?? null,
             uploaderId: session.user.id,

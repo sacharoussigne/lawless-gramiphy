@@ -1,0 +1,1 @@
+export const MAX_MIX_DURATION_SECONDS = 35 * 60;

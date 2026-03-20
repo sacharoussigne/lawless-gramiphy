@@ -4,7 +4,9 @@ import {
   Alert,
   Avatar,
   Button,
+  Card,
   Group,
+  Loader,
   Stack,
   Text,
   Title,
@@ -15,8 +17,6 @@ import {
 } from '@mantine/core';
 import {
   IconAlertCircle,
-  IconCheck,
-  IconCopy,
   IconMusic,
   IconPlayerPlay,
   IconPlaylist,
@@ -31,9 +31,10 @@ import {
 } from '@/app/_actions/playlists';
 import { handleAction } from '@/lib/action';
 import { notifications } from '@mantine/notifications';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { routes } from '@/types/routes';
+import { MAX_MIX_DURATION_SECONDS } from '@/constants/mix';
 import CollaboratorsModal from './_components/CollaboratorsModal';
 import TrackRow from '../../../_components/Tracks/TrackRow';
 import useSingleAudioPlayer from '../../../_components/Tracks/useSingleAudioPlayer';
@@ -84,7 +85,10 @@ export default function PlaylistDetailsPageClient({ playlist }: PlaylistDetailsP
   const [removingId, setRemovingId] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [copiedId, setCopiedId] = useState<string | null>(null);
-  const [copiedMixMode, setCopiedMixMode] = useState<'game' | 'stream' | null>(null);
+  const [mixTrackIds, setMixTrackIds] = useState<string[]>([]);
+  const [mixJobId, setMixJobId] = useState<string | null>(null);
+  const [mixBusy, setMixBusy] = useState(false);
+  const [lastMixUrl, setLastMixUrl] = useState<string | null>(null);
   const [collaboratorsModalOpen, setCollaboratorsModalOpen] = useState(false);
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [pinLoading, setPinLoading] = useState(false);
@@ -111,29 +115,112 @@ export default function PlaylistDetailsPageClient({ playlist }: PlaylistDetailsP
     });
   };
 
-  const handleCopyMixGameUrl = () => {
-    const mixUrl = `${window.location.origin}/api/mixes/playlist/${playlist.id}/mix.mp3`;
-    navigator.clipboard.writeText(mixUrl);
-    setCopiedMixMode('game');
-    setTimeout(() => setCopiedMixMode(null), 2000);
-    notifications.show({
-      title: 'Copié',
-      message: 'Lien mix (.mp3, Content-Length) pour le jeu',
-      color: 'blue',
+  const orderedPlaylistIds = useMemo(
+    () => [...playlist.tracks].sort((a, b) => a.position - b.position).map((t) => t.id),
+    [playlist.tracks],
+  );
+
+  const trackById = useMemo(() => new Map(playlist.tracks.map((t) => [t.id, t])), [playlist.tracks]);
+
+  const effectiveMixIds = mixTrackIds.length > 0 ? mixTrackIds : orderedPlaylistIds;
+
+  const mixTotalSeconds = useMemo(() => {
+    return effectiveMixIds.reduce((acc, id) => acc + (trackById.get(id)?.duration ?? 0), 0);
+  }, [effectiveMixIds, trackById]);
+
+  const hasUnknownMixDuration = useMemo(
+    () => effectiveMixIds.some((id) => trackById.get(id)?.duration == null),
+    [effectiveMixIds, trackById],
+  );
+
+  const mixOverLimit = mixTotalSeconds > MAX_MIX_DURATION_SECONDS;
+  const mixTrackIdSet = useMemo(() => new Set(mixTrackIds), [mixTrackIds]);
+
+  const handleMixSelectChange = (trackId: string, selected: boolean) => {
+    setMixTrackIds((prev) => {
+      if (selected) {
+        if (prev.includes(trackId)) return prev;
+        return [...prev, trackId];
+      }
+      return prev.filter((id) => id !== trackId);
     });
   };
 
-  const handleCopyMixStreamUrl = () => {
-    const mixUrl = `${window.location.origin}/api/mixes/playlist?playlistId=${encodeURIComponent(playlist.id)}`;
-    navigator.clipboard.writeText(mixUrl);
-    setCopiedMixMode('stream');
-    setTimeout(() => setCopiedMixMode(null), 2000);
-    notifications.show({
-      title: 'Copié',
-      message: 'Lien mix streaming (navigateur)',
-      color: 'blue',
-    });
+  const selectAllMixTracks = () => setMixTrackIds(orderedPlaylistIds);
+  const clearMixTracks = () => setMixTrackIds([]);
+
+  const handleBuildMix = async () => {
+    if (orderedPlaylistIds.length === 0) return;
+    setMixBusy(true);
+    setLastMixUrl(null);
+    try {
+      const res = await fetch('/api/mixes/build', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          playlistId: playlist.id,
+          trackIds: mixTrackIds.length > 0 ? mixTrackIds : [],
+        }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(typeof json?.error === 'string' ? json.error : 'Impossible de créer le mix');
+      }
+      const jobId = json?.data?.jobId as string | undefined;
+      if (!jobId) throw new Error('Réponse serveur invalide');
+      setMixJobId(jobId);
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : 'Erreur inconnue';
+      notifications.show({ title: 'Erreur', message, color: 'red' });
+      setMixBusy(false);
+    }
   };
+
+  useEffect(() => {
+    if (!mixJobId) return;
+
+    let cancelled = false;
+    const interval = window.setInterval(async () => {
+      try {
+        const res = await fetch(`/api/mixes/build?jobId=${encodeURIComponent(mixJobId)}`, {
+          credentials: 'include',
+        });
+        const json = await res.json().catch(() => ({}));
+        const data = json?.data;
+        if (!data || cancelled) return;
+
+        if (data.status === 'done' && data.s3Url) {
+          window.clearInterval(interval);
+          setMixBusy(false);
+          setMixJobId(null);
+          setLastMixUrl(data.s3Url);
+          await navigator.clipboard.writeText(data.s3Url);
+          notifications.show({
+            title: 'Mix prêt',
+            message: 'Lien S3 copié dans le presse-papiers',
+            color: 'green',
+          });
+        } else if (data.status === 'error') {
+          window.clearInterval(interval);
+          setMixBusy(false);
+          setMixJobId(null);
+          notifications.show({
+            title: 'Erreur',
+            message: data.error || data.message || 'Échec du mix',
+            color: 'red',
+          });
+        }
+      } catch {
+        // ignore transient polling errors
+      }
+    }, 800);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
+  }, [mixJobId]);
 
   const handleRemove = async (track: PlaylistTrack) => {
     if (!playlist.canEdit) return;
@@ -241,24 +328,6 @@ export default function PlaylistDetailsPageClient({ playlist }: PlaylistDetailsP
           </Group>
         </Stack>
         <Group gap="xs">
-          <Button
-            size="xs"
-            variant="subtle"
-            color={copiedMixMode === 'game' ? 'green' : undefined}
-            leftSection={copiedMixMode === 'game' ? <IconCheck size={14} /> : <IconCopy size={14} />}
-            onClick={handleCopyMixGameUrl}
-          >
-            {copiedMixMode === 'game' ? 'Lien jeu copié' : 'Copier mix (jeu)'}
-          </Button>
-          <Button
-            size="xs"
-            variant="subtle"
-            color={copiedMixMode === 'stream' ? 'green' : undefined}
-            leftSection={copiedMixMode === 'stream' ? <IconCheck size={14} /> : <IconCopy size={14} />}
-            onClick={handleCopyMixStreamUrl}
-          >
-            {copiedMixMode === 'stream' ? 'Lien stream copié' : 'Copier mix (navigateur)'}
-          </Button>
           <Tooltip label={playlist.isPinned ? 'Désépingler' : 'Épingler'} withArrow>
             <ActionIcon
               size="lg"
@@ -314,6 +383,78 @@ export default function PlaylistDetailsPageClient({ playlist }: PlaylistDetailsP
         <Alert icon={<IconAlertCircle size={16} />} color="red">
           {error}
         </Alert>
+      )}
+
+      {playlist.tracks.length > 0 && (
+        <Card withBorder radius="md" p="sm">
+          <Stack gap="sm">
+            <Group justify="space-between" align="flex-start" wrap="wrap" gap="sm">
+              <Stack gap={4}>
+                <Text fw={600} size="sm">
+                  Mix pour le jeu (S3)
+                </Text>
+                <Text size="xs" c="dimmed">
+                  Coche des pistes pour un sous-ensemble, ou laisse tout décoché pour utiliser toute la playlist dans
+                  l’ordre. Max {Math.floor(MAX_MIX_DURATION_SECONDS / 60)} min.
+                </Text>
+              </Stack>
+              <Group gap="xs">
+                <Button size="xs" variant="default" onClick={selectAllMixTracks}>
+                  Tout sélectionner
+                </Button>
+                <Button size="xs" variant="subtle" onClick={clearMixTracks}>
+                  Effacer la sélection
+                </Button>
+              </Group>
+            </Group>
+            <Group gap="md" align="center" wrap="wrap">
+              <Text size="sm">
+                Durée estimée :{' '}
+                <Text span fw={600}>
+                  {Math.floor(mixTotalSeconds / 60)}:{(mixTotalSeconds % 60).toString().padStart(2, '0')}
+                </Text>
+                {mixOverLimit && (
+                  <Text span c="red" ml="xs">
+                    (dépasse la limite)
+                  </Text>
+                )}
+              </Text>
+              {hasUnknownMixDuration && (
+                <Text size="xs" c="orange">
+                  Certaines durées sont inconnues : la génération peut échouer.
+                </Text>
+              )}
+            </Group>
+            <Group gap="xs" align="center">
+              <Button
+                size="sm"
+                onClick={() => void handleBuildMix()}
+                disabled={
+                  mixBusy || orderedPlaylistIds.length === 0 || mixOverLimit || hasUnknownMixDuration
+                }
+                leftSection={mixBusy ? <Loader size={14} color="white" /> : undefined}
+              >
+                {mixBusy ? 'Génération…' : 'Générer et copier le lien S3'}
+              </Button>
+              {lastMixUrl && (
+                <Button
+                  size="xs"
+                  variant="light"
+                  onClick={() => {
+                    void navigator.clipboard.writeText(lastMixUrl);
+                    notifications.show({ title: 'Copié', message: 'Lien S3 copié', color: 'blue' });
+                  }}
+                >
+                  Recopier le dernier lien
+                </Button>
+              )}
+            </Group>
+            <Text size="xs" c="dimmed">
+              Expiration S3 : configure une règle de cycle de vie sur le préfixe <code>mixes/</code> (ex. suppression
+              après 1 jour). Voir <code>docs/s3-mix-lifecycle.md</code>.
+            </Text>
+          </Stack>
+        </Card>
       )}
 
       <CollaboratorsModal
@@ -387,6 +528,9 @@ export default function PlaylistDetailsPageClient({ playlist }: PlaylistDetailsP
                 deleting={removingId === track.id}
                 showAddToPlaylist={false}
                 removeActionLabel="Retirer"
+                mixSelectMode
+                mixSelected={mixTrackIdSet.has(track.id)}
+                onMixSelectChange={handleMixSelectChange}
               />
             ))}
           </Stack>

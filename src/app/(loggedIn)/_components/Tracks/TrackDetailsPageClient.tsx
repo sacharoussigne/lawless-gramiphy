@@ -27,6 +27,7 @@ type Track = {
   artist: string | null;
   youtubeUrl: string;
   s3Url: string;
+  fileSizeMb: number | null;
   duration: number | null;
   thumbnail: string | null;
   uploaderId: string | null;
@@ -42,6 +43,11 @@ function formatDuration(s: number) {
   return `${m}:${sec.toString().padStart(2, '0')}`;
 }
 
+function formatStoredMb(mb: number | null) {
+  if (mb == null || !Number.isFinite(mb) || mb < 0) return null;
+  return `${mb.toFixed(2)} Mo`;
+}
+
 export default function TrackDetailsPageClient({ track }: { track: Track }) {
   const router = useRouter();
   const audioPlayer = useSingleAudioPlayer();
@@ -51,6 +57,8 @@ export default function TrackDetailsPageClient({ track }: { track: Track }) {
   const [copied, setCopied] = useState(false);
 
   const [addToPlaylistOpened, setAddToPlaylistOpened] = useState(false);
+
+  const fileSizeLabel = formatStoredMb(track.fileSizeMb);
 
   const active = audioPlayer.currentTrackId === track.id;
   const durationSeconds = active ? audioPlayer.duration || track.duration || 0 : track.duration || audioPlayer.duration || 0;
@@ -114,6 +122,7 @@ export default function TrackDetailsPageClient({ track }: { track: Track }) {
               {track.artist && <Text c="dimmed" size="sm">{track.artist}</Text>}
               <Text c="dimmed" size="xs">
                 Ajoutée par {track.uploaderName ?? 'Inconnu'} · {formatDuration(track.duration ?? 0)}
+                {fileSizeLabel ? ` · ${fileSizeLabel}` : ''}
               </Text>
             </div>
           </Group>
