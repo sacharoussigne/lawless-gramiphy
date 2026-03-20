@@ -499,15 +499,15 @@ export default function LibraryPageClient({ initialTracks }: LibraryPageClientPr
             >
               Ajouter
             </Button>
-            {filteredTracks.length >= MIN_MIX_TRACK_COUNT && !mixMode && (
+            {(mixMode || filteredTracks.length >= MIN_MIX_TRACK_COUNT) && (
               <Button
                 size="sm"
                 variant="light"
-                color="violet"
+                color="green"
                 leftSection={<IconStack2 size={16} />}
-                onClick={() => setMixMode(true)}
+                onClick={() => (mixMode ? exitMixMode() : setMixMode(true))}
               >
-                Créer un mix
+                {mixMode ? 'Annuler' : 'Créer un mix'}
               </Button>
             )}
           </Group>
@@ -570,14 +570,14 @@ export default function LibraryPageClient({ initialTracks }: LibraryPageClientPr
           </Card>
 
           {mixMode && initialTracks.length >= MIN_MIX_TRACK_COUNT && (
-            <Alert variant="light" color="violet" icon={<IconStack2 size={18} />} title="Mode mix">
+            <Alert variant="light" color="green" icon={<IconStack2 size={18} />} title="Mode mix">
               <Stack gap="sm">
                 {filteredTracks.length === 0 ? (
                   <Group justify="space-between" wrap="wrap" gap="sm">
                     <Text size="sm" c="dimmed">
                       Aucune musique ne correspond aux filtres. Ajuste la recherche ou quitte le mode mix.
                     </Text>
-                    <Button size="xs" variant="default" onClick={exitMixMode}>
+                    <Button size="xs" variant="subtle" color="gray" onClick={exitMixMode}>
                       Quitter
                     </Button>
                   </Group>
@@ -587,26 +587,28 @@ export default function LibraryPageClient({ initialTracks }: LibraryPageClientPr
                       Il faut au moins {MIN_MIX_TRACK_COUNT} musiques dans la liste affichée pour un mix. Élargis les
                       filtres ou quitte le mode mix.
                     </Text>
-                    <Button size="xs" variant="default" onClick={exitMixMode}>
+                    <Button size="xs" variant="subtle" color="gray" onClick={exitMixMode}>
                       Quitter
                     </Button>
                   </Group>
                 ) : (
                   <>
-                    <Group justify="space-between" align="flex-start" wrap="wrap" gap="sm">
+                    <Group justify="space-between" align="center" wrap="wrap" gap="sm">
                       <Text size="xs" c="dimmed">
                         Sélectionne au moins {MIN_MIX_TRACK_COUNT} musiques. Ordre = ordre de sélection. Max{' '}
                         {Math.floor(MAX_MIX_DURATION_SECONDS / 60)} min.
                       </Text>
-                      <Group gap="xs">
-                        <Button size="xs" variant="default" onClick={exitMixMode}>
-                          Quitter
-                        </Button>
-                        <Button size="xs" variant="default" onClick={selectFilteredForMix}>
+                      <Group gap="xs" justify="flex-end" wrap="wrap" align="center">
+                        <Button size="xs" variant="subtle" color="gray" onClick={selectFilteredForMix}>
                           Tout sélectionner
                         </Button>
-                        <Button size="xs" variant="subtle" onClick={clearMixTracks}>
-                          Effacer
+                        {mixTrackIds.length > 0 && (
+                          <Button size="xs" variant="subtle" color="gray" onClick={clearMixTracks}>
+                            Effacer
+                          </Button>
+                        )}
+                        <Button size="xs" variant="subtle" color="gray" onClick={exitMixMode}>
+                          Quitter
                         </Button>
                       </Group>
                     </Group>
@@ -636,7 +638,7 @@ export default function LibraryPageClient({ initialTracks }: LibraryPageClientPr
                     <Group gap="xs" align="center">
                       <Button
                         size="sm"
-                        color="violet"
+                        color="green"
                         onClick={() => void handleBuildMix()}
                         disabled={
                           mixBusy ||

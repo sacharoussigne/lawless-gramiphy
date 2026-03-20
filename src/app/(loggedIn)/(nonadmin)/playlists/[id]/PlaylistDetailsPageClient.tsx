@@ -385,15 +385,15 @@ export default function PlaylistDetailsPageClient({ playlist }: PlaylistDetailsP
           >
             Bibliothèque
           </Button>
-          {playlist.tracks.length >= MIN_MIX_TRACK_COUNT && !mixMode && (
+          {(mixMode || playlist.tracks.length >= MIN_MIX_TRACK_COUNT) && (
             <Button
               size="xs"
               variant="light"
-              color="violet"
+              color="green"
               leftSection={<IconStack2 size={14} />}
-              onClick={() => setMixMode(true)}
+              onClick={() => (mixMode ? exitMixMode() : setMixMode(true))}
             >
-              Créer un mix
+              {mixMode ? 'Annuler' : 'Créer un mix'}
             </Button>
           )}
         </Group>
@@ -406,22 +406,24 @@ export default function PlaylistDetailsPageClient({ playlist }: PlaylistDetailsP
       )}
 
       {playlist.tracks.length >= MIN_MIX_TRACK_COUNT && mixMode && (
-        <Alert variant="light" color="violet" icon={<IconStack2 size={18} />} title="Mode mix">
+        <Alert variant="light" color="green" icon={<IconStack2 size={18} />} title="Mode mix">
           <Stack gap="sm">
-            <Group justify="space-between" align="flex-start" wrap="wrap" gap="sm">
+            <Group justify="space-between" align="center" wrap="wrap" gap="sm">
               <Text size="xs" c="dimmed">
                 Coche des pistes pour un sous-ensemble (min. 2), ou laisse tout décoché pour toute la playlist dans
                 l’ordre (min. 2 musiques au total). Max {Math.floor(MAX_MIX_DURATION_SECONDS / 60)} min.
               </Text>
-              <Group gap="xs">
-                <Button size="xs" variant="default" onClick={exitMixMode}>
-                  Quitter
-                </Button>
-                <Button size="xs" variant="default" onClick={selectAllMixTracks}>
+              <Group gap="xs" justify="flex-end" wrap="wrap" align="center">
+                <Button size="xs" variant="subtle" color="gray" onClick={selectAllMixTracks}>
                   Tout sélectionner
                 </Button>
-                <Button size="xs" variant="subtle" onClick={clearMixTracks}>
-                  Effacer la sélection
+                {mixTrackIds.length > 0 && (
+                  <Button size="xs" variant="subtle" color="gray" onClick={clearMixTracks}>
+                    Effacer la sélection
+                  </Button>
+                )}
+                <Button size="xs" variant="subtle" color="gray" onClick={exitMixMode}>
+                  Quitter
                 </Button>
               </Group>
             </Group>
@@ -460,7 +462,7 @@ export default function PlaylistDetailsPageClient({ playlist }: PlaylistDetailsP
             <Group gap="xs" align="center">
               <Button
                 size="sm"
-                color="violet"
+                color="green"
                 onClick={() => void handleBuildMix()}
                 disabled={
                   mixBusy ||
