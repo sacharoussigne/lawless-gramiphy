@@ -650,18 +650,6 @@ export default function LibraryPageClient({ initialTracks }: LibraryPageClientPr
                       >
                         {mixBusy ? 'Génération…' : 'Générer et copier le lien'}
                       </Button>
-                      {lastMixUrl && (
-                        <Button
-                          size="xs"
-                          variant="light"
-                          onClick={() => {
-                            void navigator.clipboard.writeText(lastMixUrl);
-                            notifications.show({ title: 'Copié', message: 'Lien du mix copié', color: 'blue' });
-                          }}
-                        >
-                          Recopier le dernier lien
-                        </Button>
-                      )}
                     </Group>
                   </>
                 )}

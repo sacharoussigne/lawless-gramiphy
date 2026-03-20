@@ -18,6 +18,7 @@ import {
   IconAlertCircle,
   IconMusic,
   IconPlayerPlay,
+  IconArrowsDownUp,
   IconPlaylist,
   IconPin,
   IconPinnedOff,
@@ -26,15 +27,19 @@ import {
 import { useRouter } from 'next/navigation';
 import {
   removeTrackFromPlaylist,
+  reorderTracksInPlaylist,
   togglePinnedPlaylist,
   updatePlaylist,
 } from '@/app/_actions/playlists';
 import { handleAction } from '@/lib/action';
 import { notifications } from '@mantine/notifications';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type CSSProperties } from 'react';
 import Link from 'next/link';
 import { routes } from '@/types/routes';
 import { MAX_MIX_DURATION_SECONDS, MIN_MIX_TRACK_COUNT } from '@/constants/mix';
+import { DndContext, PointerSensor, useSensor, closestCenter } from '@dnd-kit/core';
+import { arrayMove, SortableContext, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 import CollaboratorsModal from './_components/CollaboratorsModal';
 import TrackRow from '../../../_components/Tracks/TrackRow';
 import useSingleAudioPlayer from '../../../_components/Tracks/useSingleAudioPlayer';
@@ -93,6 +98,7 @@ export default function PlaylistDetailsPageClient({ playlist }: PlaylistDetailsP
   const [collaboratorsModalOpen, setCollaboratorsModalOpen] = useState(false);
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [pinLoading, setPinLoading] = useState(false);
+  const [reorderBusy, setReorderBusy] = useState(false);
 
   const filteredTracks = useMemo(() => {
     if (!search.trim()) return playlist.tracks;
@@ -104,6 +110,12 @@ export default function PlaylistDetailsPageClient({ playlist }: PlaylistDetailsP
       return inTitle || inArtist || inUploader;
     });
   }, [playlist.tracks, search]);
+
+  const displayTracks = useMemo(() => {
+    const tracks = [...filteredTracks];
+    tracks.sort((a, b) => a.position - b.position);
+    return tracks;
+  }, [filteredTracks]);
 
   const handleCopy = (s3Url: string, id: string) => {
     navigator.clipboard.writeText(s3Url);
@@ -120,6 +132,9 @@ export default function PlaylistDetailsPageClient({ playlist }: PlaylistDetailsP
     () => [...playlist.tracks].sort((a, b) => a.position - b.position).map((t) => t.id),
     [playlist.tracks],
   );
+
+  const canReorder = playlist.canEdit && !mixMode && !search.trim();
+  const displayTrackIds = useMemo(() => displayTracks.map((t) => t.id), [displayTracks]);
 
   const trackById = useMemo(() => new Map(playlist.tracks.map((t) => [t.id, t])), [playlist.tracks]);
 
@@ -157,6 +172,8 @@ export default function PlaylistDetailsPageClient({ playlist }: PlaylistDetailsP
     setMixMode(false);
     setMixTrackIds([]);
   };
+
+  const sensors = useSensor(PointerSensor, { activationConstraint: { distance: 6 } });
 
   const handleBuildMix = async () => {
     if (orderedPlaylistIds.length === 0) return;
@@ -286,6 +303,90 @@ export default function PlaylistDetailsPageClient({ playlist }: PlaylistDetailsP
 
   const canManageCollaborators = playlist.isOwner || playlist.isAdminOrDj;
   const canEditMetadata = playlist.isOwner || playlist.isAdminOrDj;
+
+  const handleReorder = async (newOrderedTrackIds: string[]) => {
+    if (reorderBusy) return;
+    setReorderBusy(true);
+    try {
+      const result = await reorderTracksInPlaylist(playlist.id, newOrderedTrackIds);
+      handleAction(result);
+      notifications.show({
+        title: 'Ordre mis à jour',
+        message: 'Les musiques ont été réordonnées',
+        color: 'green',
+      });
+      router.refresh();
+    } catch (e: any) {
+      const message = e.message || 'Erreur inconnue';
+      notifications.show({
+        title: 'Erreur',
+        message,
+        color: 'red',
+      });
+    } finally {
+      setReorderBusy(false);
+    }
+  };
+
+  function SortableTrackRowItem({ track }: { track: PlaylistTrack }) {
+    const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } = useSortable(
+      {
+        id: track.id,
+        disabled: !canReorder || reorderBusy,
+      },
+    );
+
+    const style: CSSProperties = {
+      transform: CSS.Transform.toString(transform),
+      transition,
+      opacity: isDragging ? 0.6 : 1,
+    };
+
+    return (
+      <div ref={setNodeRef} style={style}>
+        <div style={{ display: 'flex', alignItems: 'stretch', gap: 8 }}>
+          <div
+            ref={setActivatorNodeRef}
+            {...attributes}
+            {...listeners}
+            style={{
+              width: 30,
+              display: 'flex',
+              alignItems: 'flex-start',
+              justifyContent: 'center',
+              paddingTop: 10,
+              touchAction: 'none',
+              cursor: canReorder ? 'grab' : 'default',
+              userSelect: 'none',
+            }}
+            aria-label="Réordonner"
+            title="Réordonner"
+          >
+            <IconArrowsDownUp size={16} stroke={1.8} />
+          </div>
+          <div style={{ flex: 1 }}>
+            <TrackRow
+              track={{ ...track, canDelete: playlist.canEdit }}
+              trackHref={`/tracks/${track.id}`}
+              currentTrackId={audioPlayer.currentTrackId}
+              isPlaying={audioPlayer.isPlaying}
+              progressRatio={audioPlayer.progressRatio}
+              onTogglePlay={(args) => audioPlayer.togglePlay(args)}
+              onCopy={handleCopy}
+              copiedTrackId={copiedId}
+              onDeleteTrack={(t) => void handleRemove(t as any)}
+              deleting={removingId === track.id}
+              showAddToPlaylist={false}
+              removeActionLabel="Retirer"
+              mixSelectMode={mixMode}
+              mixSelected={mixTrackIdSet.has(track.id)}
+              onMixSelectChange={handleMixSelectChange}
+            />
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   const handleUpdatePlaylist = async (values: {
     name: string;
@@ -475,18 +576,6 @@ export default function PlaylistDetailsPageClient({ playlist }: PlaylistDetailsP
               >
                 {mixBusy ? 'Génération…' : 'Générer et copier le lien'}
               </Button>
-              {lastMixUrl && (
-                <Button
-                  size="xs"
-                  variant="light"
-                  onClick={() => {
-                    void navigator.clipboard.writeText(lastMixUrl);
-                    notifications.show({ title: 'Copié', message: 'Lien du mix copié', color: 'blue' });
-                  }}
-                >
-                  Recopier le dernier lien
-                </Button>
-              )}
             </Group>
           </Stack>
         </Alert>
@@ -547,28 +636,55 @@ export default function PlaylistDetailsPageClient({ playlist }: PlaylistDetailsP
             Aucune musique ne correspond à la recherche.
           </Text>
         ) : (
-          <Stack gap="sm">
-            {filteredTracks.map((track) => (
-              <TrackRow
-                key={track.id}
-                track={{ ...track, canDelete: playlist.canEdit }}
-                trackHref={`/tracks/${track.id}`}
-                currentTrackId={audioPlayer.currentTrackId}
-                isPlaying={audioPlayer.isPlaying}
-                progressRatio={audioPlayer.progressRatio}
-                onTogglePlay={(args) => audioPlayer.togglePlay(args)}
-                onCopy={handleCopy}
-                copiedTrackId={copiedId}
-                onDeleteTrack={(t) => void handleRemove(t as any)}
-                deleting={removingId === track.id}
-                showAddToPlaylist={false}
-                removeActionLabel="Retirer"
-                mixSelectMode={mixMode}
-                mixSelected={mixTrackIdSet.has(track.id)}
-                onMixSelectChange={handleMixSelectChange}
-              />
-            ))}
-          </Stack>
+          canReorder ? (
+            <DndContext
+              sensors={[sensors]}
+              collisionDetection={closestCenter}
+              onDragEnd={(event) => {
+                const activeId = event.active.id as string;
+                const overId = event.over?.id as string | undefined;
+
+                if (!overId || activeId === overId) return;
+                const oldIndex = displayTrackIds.indexOf(activeId);
+                const newIndex = displayTrackIds.indexOf(overId);
+                if (oldIndex < 0 || newIndex < 0) return;
+
+                const newOrdered = arrayMove(displayTrackIds, oldIndex, newIndex);
+                void handleReorder(newOrdered);
+              }}
+            >
+              <SortableContext items={displayTrackIds} strategy={verticalListSortingStrategy}>
+                <Stack gap="sm">
+                  {displayTracks.map((track) => (
+                    <SortableTrackRowItem key={track.id} track={track} />
+                  ))}
+                </Stack>
+              </SortableContext>
+            </DndContext>
+          ) : (
+            <Stack gap="sm">
+              {displayTracks.map((track) => (
+                <TrackRow
+                  key={track.id}
+                  track={{ ...track, canDelete: playlist.canEdit }}
+                  trackHref={`/tracks/${track.id}`}
+                  currentTrackId={audioPlayer.currentTrackId}
+                  isPlaying={audioPlayer.isPlaying}
+                  progressRatio={audioPlayer.progressRatio}
+                  onTogglePlay={(args) => audioPlayer.togglePlay(args)}
+                  onCopy={handleCopy}
+                  copiedTrackId={copiedId}
+                  onDeleteTrack={(t) => void handleRemove(t as any)}
+                  deleting={removingId === track.id}
+                  showAddToPlaylist={false}
+                  removeActionLabel="Retirer"
+                  mixSelectMode={mixMode}
+                  mixSelected={mixTrackIdSet.has(track.id)}
+                  onMixSelectChange={handleMixSelectChange}
+                />
+              ))}
+            </Stack>
+          )
         )}
       </Stack>
     </Stack>
