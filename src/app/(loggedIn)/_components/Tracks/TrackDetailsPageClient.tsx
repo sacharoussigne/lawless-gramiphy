@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
+  ActionIcon,
   Alert,
   Button,
   Card,
@@ -132,9 +133,14 @@ export default function TrackDetailsPageClient({ track }: { track: Track }) {
           <Button size="sm" variant="subtle" component={Link} href={routes.library.index}>
             Bibliothèque
           </Button>
-          <Button size="sm" variant="light" leftSection={<IconPlaylist size={14} />} onClick={openAddToPlaylistModal}>
-            Ajouter à une playlist
-          </Button>
+          <ActionIcon
+            size="lg"
+            variant="light"
+            onClick={openAddToPlaylistModal}
+            aria-label="Ajouter à une playlist"
+          >
+            <IconPlaylist size={18} />
+          </ActionIcon>
           {track.canDelete && (
             <Button size="sm" color="red" variant="light" leftSection={<IconTrash size={14} />} loading={deleting} onClick={handleDelete}>
               Supprimer
@@ -253,16 +259,22 @@ export default function TrackDetailsPageClient({ track }: { track: Track }) {
             <Button variant="default" leftSection={<IconCopy size={14} />} onClick={handleCopy}>
               {copied ? 'Copié' : 'Copier'}
             </Button>
-            <Button variant="subtle" onClick={openAddToPlaylistModal} leftSection={<IconPlaylist size={14} />}>
-              Playlists
-            </Button>
+            <ActionIcon
+              variant="subtle"
+              size="lg"
+              onClick={openAddToPlaylistModal}
+              aria-label="Playlists"
+            >
+              <IconPlaylist size={18} />
+            </ActionIcon>
           </Group>
         </Stack>
       </Card>
 
       <AddToPlaylistModal
         opened={addToPlaylistOpened}
-        track={{ id: track.id, title: track.title }}
+        trackIds={[track.id]}
+        trackTitle={track.title}
         onClose={() => setAddToPlaylistOpened(false)}
       />
     </Stack>

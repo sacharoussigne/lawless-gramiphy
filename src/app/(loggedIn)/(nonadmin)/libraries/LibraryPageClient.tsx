@@ -77,7 +77,14 @@ export default function LibraryPageClient({ initialTracks }: LibraryPageClientPr
   const [search, setSearch] = useState('');
   const [uploaderFilter, setUploaderFilter] = useState<string | null>(null);
   const [sortBy, setSortBy] = useState<'date_desc' | 'date_asc' | 'title' | 'artist'>('date_desc');
-  const [addToPlaylistTrack, setAddToPlaylistTrack] = useState<Track | null>(null);
+  const [playlistAddSelectionMode, setPlaylistAddSelectionMode] = useState(false);
+  const [playlistAddSelectedTrackIds, setPlaylistAddSelectedTrackIds] = useState<string[]>([]);
+  const playlistAddSelectedTrackIdSet = useMemo(() => new Set(playlistAddSelectedTrackIds), [playlistAddSelectedTrackIds]);
+
+  const [addToPlaylistOpened, setAddToPlaylistOpened] = useState(false);
+  const [addToPlaylistTrackIds, setAddToPlaylistTrackIds] = useState<string[]>([]);
+  const [addToPlaylistTrackTitle, setAddToPlaylistTrackTitle] = useState<string | null>(null);
+  const [addToPlaylistFromSelection, setAddToPlaylistFromSelection] = useState(false);
   const [mixTrackIds, setMixTrackIds] = useState<string[]>([]);
   const [mixJobId, setMixJobId] = useState<string | null>(null);
   const [mixBusy, setMixBusy] = useState(false);
@@ -115,6 +122,12 @@ export default function LibraryPageClient({ initialTracks }: LibraryPageClientPr
     setMixMode(false);
     setMixTrackIds([]);
   };
+
+  useEffect(() => {
+    if (!mixMode) return;
+    setPlaylistAddSelectionMode(false);
+    setPlaylistAddSelectedTrackIds([]);
+  }, [mixMode]);
 
   const handleBuildMix = async () => {
     if (mixTrackIds.length < MIN_MIX_TRACK_COUNT) return;
@@ -424,8 +437,47 @@ export default function LibraryPageClient({ initialTracks }: LibraryPageClientPr
     };
   }, [downloadJobId, router]);
 
+  const handlePlaylistAddSelectChange = (trackId: string, selected: boolean) => {
+    setPlaylistAddSelectedTrackIds((prev) => {
+      if (selected) {
+        if (prev.includes(trackId)) return prev;
+        return [...prev, trackId];
+      }
+      return prev.filter((id) => id !== trackId);
+    });
+  };
+
+  const closeAddToPlaylistPanel = () => {
+    const shouldClearSelection = addToPlaylistFromSelection;
+    setAddToPlaylistOpened(false);
+    setAddToPlaylistTrackIds([]);
+    setAddToPlaylistTrackTitle(null);
+    setAddToPlaylistFromSelection(false);
+
+    if (shouldClearSelection) {
+      setPlaylistAddSelectionMode(false);
+      setPlaylistAddSelectedTrackIds([]);
+    }
+  };
+
+  const openAddSelectedTracksToPlaylist = () => {
+    if (playlistAddSelectedTrackIds.length === 0) return;
+
+    setAddToPlaylistFromSelection(true);
+    setAddToPlaylistTrackIds(playlistAddSelectedTrackIds);
+    setAddToPlaylistTrackTitle(
+      playlistAddSelectedTrackIds.length === 1 ? libraryTrackById.get(playlistAddSelectedTrackIds[0])?.title ?? null : null,
+    );
+
+    setPlaylistAddSelectionMode(false);
+    setAddToPlaylistOpened(true);
+  };
+
   const openAddToPlaylistMenu = (track: Track) => {
-    setAddToPlaylistTrack(track);
+    setAddToPlaylistFromSelection(false);
+    setAddToPlaylistTrackIds([track.id]);
+    setAddToPlaylistTrackTitle(track.title);
+    setAddToPlaylistOpened(true);
   };
 
   const copyLink = (s3Url: string, id: string) => {
@@ -499,6 +551,25 @@ export default function LibraryPageClient({ initialTracks }: LibraryPageClientPr
             >
               Ajouter
             </Button>
+            {!mixMode && (
+              <Button
+                size="sm"
+                variant="light"
+                leftSection={<IconPlaylist size={16} />}
+                color={playlistAddSelectionMode ? 'gray' : undefined}
+                onClick={() => {
+                  if (playlistAddSelectionMode) {
+                    setPlaylistAddSelectionMode(false);
+                    setPlaylistAddSelectedTrackIds([]);
+                  } else {
+                    setPlaylistAddSelectionMode(true);
+                    setPlaylistAddSelectedTrackIds([]);
+                  }
+                }}
+              >
+                {playlistAddSelectionMode ? 'Annuler' : 'Ajouter à une playlist'}
+              </Button>
+            )}
             {(mixMode || filteredTracks.length >= MIN_MIX_TRACK_COUNT) && (
               <Button
                 size="sm"
@@ -568,6 +639,37 @@ export default function LibraryPageClient({ initialTracks }: LibraryPageClientPr
               </Group>
             </Group>
           </Card>
+
+          {!mixMode && playlistAddSelectionMode && playlistAddSelectedTrackIds.length === 0 && (
+            <Text size="xs" c="dimmed" tt="uppercase" fw={300} lts={1}>
+              Survole les musiques pour les sélectionner
+            </Text>
+          )}
+
+          {!mixMode && playlistAddSelectedTrackIds.length > 0 && (
+            <Group justify="space-between" align="center" wrap="nowrap" gap="sm">
+              <Text size="sm" c="dimmed">
+                Sélection : {playlistAddSelectedTrackIds.length}
+              </Text>
+              <Group gap="xs" align="center" wrap="nowrap">
+                <Button
+                  size="xs"
+                  color="green"
+                  leftSection={<IconPlaylist size={14} />}
+                  onClick={openAddSelectedTracksToPlaylist}
+                >
+                  Ajouter à une playlist ({playlistAddSelectedTrackIds.length})
+                </Button>
+                <Button
+                  size="xs"
+                  variant="light"
+                  onClick={() => setPlaylistAddSelectedTrackIds([])}
+                >
+                  Effacer
+                </Button>
+              </Group>
+            </Group>
+          )}
 
           {mixMode && initialTracks.length >= MIN_MIX_TRACK_COUNT && (
             <Alert variant="light" color="green" icon={<IconStack2 size={18} />} title="Mode mix">
@@ -692,6 +794,9 @@ export default function LibraryPageClient({ initialTracks }: LibraryPageClientPr
                   onOpenAddToPlaylistMenu={(t) => void openAddToPlaylistMenu(t as any)}
                   onDeleteTrack={(t) => void handleDelete(t as any)}
                   deleting={deletingId === track.id}
+                  playlistSelectEnabled={!mixMode && playlistAddSelectionMode}
+                  playlistSelected={playlistAddSelectedTrackIdSet.has(track.id)}
+                  onPlaylistSelectChange={handlePlaylistAddSelectChange}
                   mixSelectMode={mixMode}
                   mixSelected={mixTrackIdSet.has(track.id)}
                   onMixSelectChange={handleMixSelectChange}
@@ -815,9 +920,10 @@ export default function LibraryPageClient({ initialTracks }: LibraryPageClientPr
         </Modal>
 
         <AddToPlaylistModal
-          opened={!!addToPlaylistTrack}
-          track={addToPlaylistTrack ? { id: addToPlaylistTrack.id, title: addToPlaylistTrack.title } : null}
-          onClose={() => setAddToPlaylistTrack(null)}
+          opened={addToPlaylistOpened}
+          trackIds={addToPlaylistTrackIds}
+          trackTitle={addToPlaylistTrackTitle}
+          onClose={closeAddToPlaylistPanel}
         />
     </Stack>
   );
