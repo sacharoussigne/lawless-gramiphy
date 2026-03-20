@@ -824,6 +824,112 @@ export async function removeTrackFromPlaylist(
   }
 }
 
+export async function reorderTracksInPlaylist(
+  playlistId: string,
+  orderedTrackIds: string[],
+): Promise<ServerActionResponse<null>> {
+  try {
+    const session = await getAuthSession();
+    if (!session) {
+      return { status: 401, error: 'Non autorisé' };
+    }
+
+    const validatedPlaylistId = z.string().min(1).parse(playlistId);
+    const validatedOrderedTrackIds = z
+      .array(z.string().min(1))
+      .min(1, 'La liste des musiques est requise')
+      .parse(orderedTrackIds);
+
+    const role = session.user.role ?? null;
+
+    const playlist = await prisma.playlist.findUnique({
+      where: { id: validatedPlaylistId },
+      include: {
+        collaborators: true,
+      },
+    });
+
+    if (!playlist) {
+      return { status: 404, error: 'Playlist introuvable' };
+    }
+
+    const permissions = computePlaylistPermissions({
+      playlistOwnerId: playlist.ownerId,
+      userId: session.user.id,
+      role,
+      collaboratorsUserIds: playlist.collaborators.map((c) => c.userId),
+    });
+
+    if (!permissions.canEdit) {
+      return {
+        status: 403,
+        error: 'Vous ne pouvez modifier que vos propres playlists',
+      };
+    }
+
+    const playlistTracks = await prisma.playlistTrack.findMany({
+      where: { playlistId: validatedPlaylistId },
+      select: { id: true, trackId: true },
+    });
+
+    if (playlistTracks.length !== validatedOrderedTrackIds.length) {
+      return {
+        status: 400,
+        error: 'La liste des musiques ne correspond pas à la playlist',
+      };
+    }
+
+    const orderedTrackIdSet = new Set(validatedOrderedTrackIds);
+    if (orderedTrackIdSet.size !== validatedOrderedTrackIds.length) {
+      return {
+        status: 400,
+        error: 'La liste des musiques contient des doublons',
+      };
+    }
+
+    const trackIdToPlaylistTrackId = new Map<string, string>();
+    for (const pt of playlistTracks) {
+      trackIdToPlaylistTrackId.set(pt.trackId, pt.id);
+    }
+
+    for (const trackId of validatedOrderedTrackIds) {
+      if (!trackIdToPlaylistTrackId.has(trackId)) {
+        return {
+          status: 400,
+          error: 'Reorder invalide : une musique ne fait pas partie de la playlist',
+        };
+      }
+    }
+
+    await prisma.$transaction(async (tx) => {
+      for (let index = 0; index < validatedOrderedTrackIds.length; index++) {
+        const trackId = validatedOrderedTrackIds[index]!;
+        const playlistTrackId = trackIdToPlaylistTrackId.get(trackId);
+        if (!playlistTrackId) continue;
+
+        await tx.playlistTrack.update({
+          where: { id: playlistTrackId },
+          data: { position: index + 1 },
+        });
+      }
+    });
+
+    return { status: 200, data: null };
+  } catch (error) {
+    const parsed = actionErrorParser(
+      error,
+      "Erreur lors du ré-ordonnancement des musiques de la playlist",
+    );
+    return {
+      status: parsed.status as 400 | 401 | 403 | 404 | 422 | 500,
+      error:
+        typeof parsed.error === 'string'
+          ? parsed.error
+          : "Erreur lors du ré-ordonnancement des musiques de la playlist",
+    };
+  }
+}
+
 export async function addCollaborator(
   playlistId: string,
   userEmail: string,

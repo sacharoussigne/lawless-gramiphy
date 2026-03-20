@@ -21,6 +21,7 @@ type Track = {
   artist: string | null;
   youtubeUrl: string;
   s3Url: string;
+  fileSizeMb: number | null;
   duration: number | null;
   thumbnail: string | null;
   uploaderId: string | null;
@@ -58,6 +59,7 @@ export async function getTracks(): Promise<ServerActionResponse<Track[]>> {
         artist: true,
         youtubeUrl: true,
         s3Url: true,
+        fileSizeMb: true,
         duration: true,
         thumbnail: true,
         uploaderId: true,
@@ -72,6 +74,7 @@ export async function getTracks(): Promise<ServerActionResponse<Track[]>> {
       artist: track.artist,
       youtubeUrl: track.youtubeUrl,
       s3Url: track.s3Url,
+      fileSizeMb: track.fileSizeMb,
       duration: track.duration,
       thumbnail: track.thumbnail,
       uploaderId: track.uploaderId,
@@ -131,6 +134,7 @@ export async function getTrackById(id: string): Promise<ServerActionResponse<Tra
         artist: true,
         youtubeUrl: true,
         s3Url: true,
+        fileSizeMb: true,
         duration: true,
         thumbnail: true,
         uploaderId: true,

@@ -25,6 +25,7 @@ model User {
   playlists             Playlist[]
   playlistCollaborators PlaylistCollaborator[]
   pinnedPlaylists       PinnedPlaylist[]
+  exportedMixes         ExportedMix[]
 
   @@unique([email])
   @@map("user")
@@ -87,6 +88,7 @@ model Track {
   youtubeId       String          @unique
   s3Key           String
   s3Url           String
+  fileSizeMb      Float?
   duration        Int?
   thumbnail       String?
   uploaderId      String?
@@ -157,4 +159,20 @@ model PlaylistCollaborator {
   @@index([playlistId])
   @@index([userId])
   @@map("playlist_collaborators")
+}
+
+model ExportedMix {
+  id                   String   @id @default(cuid())
+  s3Key                String
+  s3Url                String
+  totalDurationSeconds Int
+  fileSizeMb           Float
+  userId               String
+  user                 User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  playlistId           String?
+  trackIds             String[]
+  createdAt            DateTime @default(now())
+
+  @@index([userId])
+  @@map("exported_mixes")
 }
