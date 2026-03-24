@@ -1,11 +1,27 @@
-const DEFAULT_MIX_MP3_BITRATE = '128k';
+const FALLBACK_MIX_MP3_BITRATE = '128k';
+
+function parseMixMp3Bitrate(raw: string): string | null {
+  if (/^\d+k$/i.test(raw)) return raw.toLowerCase();
+  if (/^\d+$/.test(raw)) return raw;
+  return null;
+}
+
+/** Default stereo bitrate when MIX_MP3_BITRATE is unset. Env: MIX_MP3_DEFAULT_BITRATE (e.g. 128k). */
+function resolveDefaultMixMp3Bitrate(): string {
+  const fromEnv = process.env.MIX_MP3_DEFAULT_BITRATE?.trim();
+  if (fromEnv) {
+    const parsed = parseMixMp3Bitrate(fromEnv);
+    if (parsed) return parsed;
+  }
+  return FALLBACK_MIX_MP3_BITRATE;
+}
 
 function resolveMixMp3Bitrate(): string {
   const raw = process.env.MIX_MP3_BITRATE?.trim();
-  if (!raw) return DEFAULT_MIX_MP3_BITRATE;
-  if (/^\d+k$/i.test(raw)) return raw.toLowerCase();
-  if (/^\d+$/.test(raw)) return raw;
-  return DEFAULT_MIX_MP3_BITRATE;
+  if (!raw) return resolveDefaultMixMp3Bitrate();
+  const parsed = parseMixMp3Bitrate(raw);
+  if (parsed) return parsed;
+  return resolveDefaultMixMp3Bitrate();
 }
 
 function resolveMixMp3MonoBitrateOverride(): string | null {
