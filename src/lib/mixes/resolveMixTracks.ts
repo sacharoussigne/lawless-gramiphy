@@ -1,4 +1,8 @@
-import { MAX_MIX_DURATION_SECONDS, MIN_MIX_TRACK_COUNT } from '@/constants/mix';
+import {
+  MAX_MIX_DURATION_SECONDS,
+  MIN_MIX_TRACK_COUNT,
+  getEffectiveMaxMixDurationSeconds,
+} from '@/constants/mix';
 import prisma from '@/lib/prisma';
 
 export { MAX_MIX_DURATION_SECONDS, MIN_MIX_TRACK_COUNT };
@@ -82,8 +86,13 @@ export async function resolveMixTracksForBuild(options: {
     }
 
     const totalSeconds = orderedTracks.reduce((s, t) => s + t.duration, 0);
-    if (totalSeconds > MAX_MIX_DURATION_SECONDS) {
-      return { ok: false, status: 422, error: 'Le mix ne peut pas dépasser 35 minutes' };
+    const maxSeconds = getEffectiveMaxMixDurationSeconds();
+    if (totalSeconds > maxSeconds) {
+      return {
+        ok: false,
+        status: 422,
+        error: `Le mix ne peut pas dépasser ${Math.floor(MAX_MIX_DURATION_SECONDS / 60)} minutes`,
+      };
     }
 
     return { ok: true, orderedTracks, playlistId, totalSeconds };
@@ -116,8 +125,13 @@ export async function resolveMixTracksForBuild(options: {
   }
 
   const totalSeconds = orderedTracks.reduce((s, t) => s + t.duration, 0);
-  if (totalSeconds > MAX_MIX_DURATION_SECONDS) {
-    return { ok: false, status: 422, error: 'Le mix ne peut pas dépasser 35 minutes' };
+  const maxSeconds = getEffectiveMaxMixDurationSeconds();
+  if (totalSeconds > maxSeconds) {
+    return {
+      ok: false,
+      status: 422,
+      error: `Le mix ne peut pas dépasser ${Math.floor(MAX_MIX_DURATION_SECONDS / 60)} minutes`,
+    };
   }
 
   return { ok: true, orderedTracks, playlistId: null, totalSeconds };

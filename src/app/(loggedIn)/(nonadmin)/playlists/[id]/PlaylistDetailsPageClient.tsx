@@ -36,7 +36,12 @@ import { notifications } from '@mantine/notifications';
 import { useEffect, useMemo, useState, type CSSProperties } from 'react';
 import Link from 'next/link';
 import { routes } from '@/types/routes';
-import { MAX_MIX_DURATION_SECONDS, MIN_MIX_TRACK_COUNT } from '@/constants/mix';
+import {
+  MAX_MIX_DURATION_SECONDS,
+  MIN_MIX_TRACK_COUNT,
+  getEffectiveMaxMixDurationSeconds,
+  isMixDurationLimitDisabled,
+} from '@/constants/mix';
 import { DndContext, PointerSensor, useSensor, closestCenter } from '@dnd-kit/core';
 import { arrayMove, SortableContext, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
@@ -149,7 +154,7 @@ export default function PlaylistDetailsPageClient({ playlist }: PlaylistDetailsP
     [effectiveMixIds, trackById],
   );
 
-  const mixOverLimit = mixTotalSeconds > MAX_MIX_DURATION_SECONDS;
+  const mixOverLimit = mixTotalSeconds > getEffectiveMaxMixDurationSeconds();
   const mixEffectiveTrackCount =
     mixTrackIds.length > 0 ? mixTrackIds.length : orderedPlaylistIds.length;
   const mixTooFewTracks = mixEffectiveTrackCount < MIN_MIX_TRACK_COUNT;
@@ -512,7 +517,10 @@ export default function PlaylistDetailsPageClient({ playlist }: PlaylistDetailsP
             <Group justify="space-between" align="center" wrap="wrap" gap="sm">
               <Text size="xs" c="dimmed">
                 Coche des pistes pour un sous-ensemble (min. 2), ou laisse tout décoché pour toute la playlist dans
-                l’ordre (min. 2 musiques au total). Max {Math.floor(MAX_MIX_DURATION_SECONDS / 60)} min.
+                l’ordre (min. 2 musiques au total).{' '}
+                {isMixDurationLimitDisabled()
+                  ? 'Limite de durée désactivée (temporaire).'
+                  : `Max ${Math.floor(MAX_MIX_DURATION_SECONDS / 60)} min.`}
               </Text>
               <Group gap="xs" justify="flex-end" wrap="wrap" align="center">
                 <Button size="xs" variant="subtle" color="gray" onClick={selectAllMixTracks}>
