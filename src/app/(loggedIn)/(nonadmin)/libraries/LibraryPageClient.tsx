@@ -35,7 +35,12 @@ import { handleAction } from '@/lib/action';
 import { notifications } from '@mantine/notifications';
 import Link from 'next/link';
 import { routes } from '@/types/routes';
-import { MAX_MIX_DURATION_SECONDS, MIN_MIX_TRACK_COUNT } from '@/constants/mix';
+import {
+  MAX_MIX_DURATION_SECONDS,
+  MIN_MIX_TRACK_COUNT,
+  getEffectiveMaxMixDurationSeconds,
+  isMixDurationLimitDisabled,
+} from '@/constants/mix';
 
 type Track = {
   id: string;
@@ -103,7 +108,7 @@ export default function LibraryPageClient({ initialTracks }: LibraryPageClientPr
     [mixTrackIds, libraryTrackById],
   );
 
-  const mixOverLimit = mixTotalSeconds > MAX_MIX_DURATION_SECONDS;
+  const mixOverLimit = mixTotalSeconds > getEffectiveMaxMixDurationSeconds();
   const mixTrackIdSet = useMemo(() => new Set(mixTrackIds), [mixTrackIds]);
 
   const handleMixSelectChange = (trackId: string, selected: boolean) => {
@@ -697,8 +702,10 @@ export default function LibraryPageClient({ initialTracks }: LibraryPageClientPr
                   <>
                     <Group justify="space-between" align="center" wrap="wrap" gap="sm">
                       <Text size="xs" c="dimmed">
-                        Sélectionne au moins {MIN_MIX_TRACK_COUNT} musiques. Ordre = ordre de sélection. Max{' '}
-                        {Math.floor(MAX_MIX_DURATION_SECONDS / 60)} min.
+                        Sélectionne au moins {MIN_MIX_TRACK_COUNT} musiques. Ordre = ordre de sélection.{' '}
+                        {isMixDurationLimitDisabled()
+                          ? 'Limite de durée désactivée (temporaire).'
+                          : `Max ${Math.floor(MAX_MIX_DURATION_SECONDS / 60)} min.`}
                       </Text>
                       <Group gap="xs" justify="flex-end" wrap="wrap" align="center">
                         <Button size="xs" variant="subtle" color="gray" onClick={selectFilteredForMix}>
