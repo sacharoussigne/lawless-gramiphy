@@ -10,6 +10,7 @@ import { deleteObjectFromBucket, resolveS3KeyFromStoredFields } from '@/lib/s3/d
 
 export type MixSummary = {
   id: string;
+  name: string;
   creatorName: string | null;
   tracksCount: number;
   totalDurationSeconds: number;
@@ -22,6 +23,7 @@ export type MixSummary = {
 
 export type MixWithTracks = {
   id: string;
+  name: string;
   creatorName: string | null;
   totalDurationSeconds: number;
   fileSizeMb: number;
@@ -66,6 +68,7 @@ export async function getMixes(): Promise<ServerActionResponse<MixSummary[]>> {
       status: 200,
       data: mixes.map((m) => ({
         id: m.id,
+        name: m.name,
         creatorName: m.user?.name ?? null,
         tracksCount: m.tracks.length,
         totalDurationSeconds: m.totalDurationSeconds,
@@ -116,6 +119,7 @@ export async function getMix(id: string): Promise<ServerActionResponse<MixWithTr
       status: 200,
       data: {
         id: mix.id,
+        name: mix.name,
         creatorName: mix.user?.name ?? null,
         totalDurationSeconds: mix.totalDurationSeconds,
         fileSizeMb: mix.fileSizeMb,
@@ -141,6 +145,55 @@ export async function getMix(id: string): Promise<ServerActionResponse<MixWithTr
     return {
       status: parsed.status as 400 | 401 | 403 | 404 | 422 | 500,
       error: typeof parsed.error === 'string' ? parsed.error : 'Erreur lors du chargement du mix',
+    };
+  }
+}
+
+const MIX_NAME_MAX = 200;
+
+export async function updateMixName(
+  id: string,
+  name: string,
+): Promise<ServerActionResponse<{ name: string }>> {
+  try {
+    const session = await getAuthSession();
+    if (!session) return { status: 401, error: 'Non autorisé' };
+
+    const role = session.user.role ?? null;
+    if (!checkRolePermission(role, 'gramophone', 'access')) {
+      return { status: 403, error: 'Accès refusé' };
+    }
+
+    const mixId = id?.trim();
+    if (!mixId) return { status: 400, error: 'Mix introuvable' };
+
+    const trimmed = name.trim();
+    if (!trimmed) return { status: 422, error: 'Le nom ne peut pas être vide' };
+    if (trimmed.length > MIX_NAME_MAX) {
+      return { status: 422, error: `Le nom ne peut pas dépasser ${MIX_NAME_MAX} caractères` };
+    }
+
+    const mix = await prisma.mix.findUnique({ where: { id: mixId } });
+    if (!mix) return { status: 404, error: 'Mix introuvable' };
+
+    const canManage = checkRolePermission(role, 'gramophone', 'manage');
+    const isOwner = mix.userId === session.user.id;
+    if (!isOwner && !canManage) {
+      return { status: 403, error: 'Accès refusé' };
+    }
+
+    const updated = await prisma.mix.update({
+      where: { id: mixId },
+      data: { name: trimmed },
+      select: { name: true },
+    });
+
+    return { status: 200, data: { name: updated.name } };
+  } catch (error) {
+    const parsed = actionErrorParser(error, 'Erreur lors de la mise à jour du nom');
+    return {
+      status: parsed.status as 400 | 401 | 403 | 404 | 422 | 500,
+      error: typeof parsed.error === 'string' ? parsed.error : 'Erreur lors de la mise à jour du nom',
     };
   }
 }

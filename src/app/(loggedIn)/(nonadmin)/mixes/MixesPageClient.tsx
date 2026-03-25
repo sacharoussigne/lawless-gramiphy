@@ -26,7 +26,8 @@ export default function MixesPageClient({ initialMixes }: MixesPageClientProps) 
     if (!q) return mixes;
     return mixes.filter((m) => {
       const creator = (m.creatorName ?? '').toLowerCase();
-      return m.id.toLowerCase().includes(q) || creator.includes(q);
+      const mixName = m.name.toLowerCase();
+      return m.id.toLowerCase().includes(q) || creator.includes(q) || mixName.includes(q);
     });
   }, [mixes, query]);
 
@@ -97,7 +98,7 @@ export default function MixesPageClient({ initialMixes }: MixesPageClientProps) 
               <Group justify="space-between" align="center" wrap="wrap">
                 <Stack gap={2}>
                   <Group gap="xs" wrap="wrap">
-                    <Text fw={600}>Mix</Text>
+                    <Text fw={600}>{m.name}</Text>
                     {m.expiresAt == null ? <Badge color="green">Persistent</Badge> : <Badge color="gray">Temp</Badge>}
                   </Group>
                   <Text c="dimmed" size="sm">

@@ -164,6 +164,7 @@ model PlaylistCollaborator {
 
 model Mix {
   id                   String     @id @default(cuid())
+  name                 String     @default("Mix")
   s3Key                String
   s3Url                String
   totalDurationSeconds Int
