@@ -96,6 +96,7 @@ export async function runExportedMixJob(options: {
         status: 'done',
         message: 'Terminé',
         s3Url: existingMix.s3Url,
+        mixId,
         child: null,
       });
 
@@ -221,6 +222,7 @@ export async function runExportedMixJob(options: {
       status: 'done',
       message: 'Terminé',
       s3Url,
+      mixId,
       child: null,
     });
 

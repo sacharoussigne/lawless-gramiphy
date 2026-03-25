@@ -55,11 +55,11 @@ export function setMixJob(jobId: string, patch: Partial<MixJobInternal>) {
 export function toPublicMixJob(job: MixJobInternal): MixJobPublic {
   const base: MixJobPublic = {
     jobId: job.jobId,
-    mixId: job.mixId,
     status: job.status,
     message: job.message,
     createdAt: job.createdAt,
   };
+  if (job.mixId) base.mixId = job.mixId;
   if (job.status === 'done' && job.s3Url) base.s3Url = job.s3Url;
   if (job.status === 'error' && job.error) base.error = job.error;
   return base;
