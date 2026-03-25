@@ -1,11 +1,23 @@
 'use client';
 
-import { ActionIcon, Alert, Badge, Button, Group, Modal, Stack, Text, TextInput, Title } from '@mantine/core';
+import {
+  ActionIcon,
+  Alert,
+  Badge,
+  Button,
+  Group,
+  Modal,
+  Stack,
+  Switch,
+  Text,
+  TextInput,
+  Title,
+} from '@mantine/core';
 import { notifications } from '@mantine/notifications';
-import { IconAlertCircle, IconCheck, IconCopy, IconPencil, IconTrash } from '@tabler/icons-react';
+import { IconAlertCircle, IconCheck, IconCopy, IconSettings, IconTrash } from '@tabler/icons-react';
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { deleteMix, updateMixName, type MixWithTracks } from '@/app/_actions/mixes';
+import { deleteMix, updateMixSettings, type MixWithTracks } from '@/app/_actions/mixes';
 import { handleAction } from '@/lib/action';
 import { routes } from '@/types/routes';
 import TrackRow from '../../../_components/Tracks/TrackRow';
@@ -22,15 +34,19 @@ export default function MixDetailsPageClient({ mix }: MixDetailsPageClientProps)
   const [copiedMix, setCopiedMix] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
-  const [renameOpen, setRenameOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [nameDraft, setNameDraft] = useState(mix.name);
-  const [nameSaving, setNameSaving] = useState(false);
+  const [persistentDraft, setPersistentDraft] = useState(mix.expiresAt == null);
+  const [settingsSaving, setSettingsSaving] = useState(false);
 
   useEffect(() => {
     setNameDraft(mix.name);
-  }, [mix.id, mix.name]);
+    setPersistentDraft(mix.expiresAt == null);
+  }, [mix.id, mix.name, mix.expiresAt]);
 
   const nameDirty = nameDraft.trim() !== mix.name;
+  const persistentDirty = persistentDraft !== (mix.expiresAt == null);
+  const settingsDirty = nameDirty || persistentDirty;
   const nameValid = nameDraft.trim().length > 0;
 
   const creatorLabel = mix.creatorName ?? 'Inconnu';
@@ -49,29 +65,34 @@ export default function MixDetailsPageClient({ mix }: MixDetailsPageClientProps)
     notifications.show({ title: 'Copié', message: 'Lien du mix copié dans le presse-papiers', color: 'blue' });
   };
 
-  const openRenameModal = () => {
+  const openSettingsModal = () => {
     setNameDraft(mix.name);
-    setRenameOpen(true);
+    setPersistentDraft(mix.expiresAt == null);
+    setSettingsOpen(true);
   };
 
-  const handleSaveName = async () => {
+  const handleSaveSettings = async () => {
     const next = nameDraft.trim();
-    if (!next || next === mix.name) {
-      setRenameOpen(false);
+    if (!nameValid) return;
+    if (!settingsDirty) {
+      setSettingsOpen(false);
       return;
     }
-    setNameSaving(true);
+    setSettingsSaving(true);
     try {
-      const result = await updateMixName(mix.id, nameDraft);
+      const result = await updateMixSettings(mix.id, {
+        name: nameDraft,
+        persistent: persistentDraft,
+      });
       handleAction(result);
-      notifications.show({ title: 'Enregistré', message: 'Nom du mix mis à jour', color: 'green' });
-      setRenameOpen(false);
+      notifications.show({ title: 'Enregistré', message: 'Paramètres du mix mis à jour', color: 'green' });
+      setSettingsOpen(false);
       router.refresh();
     } catch (e: unknown) {
       const message = e instanceof Error ? e.message : 'Erreur inconnue';
       notifications.show({ title: 'Erreur', message, color: 'red' });
     } finally {
-      setNameSaving(false);
+      setSettingsSaving(false);
     }
   };
 
@@ -95,26 +116,41 @@ export default function MixDetailsPageClient({ mix }: MixDetailsPageClientProps)
   return (
     <Stack gap="md">
       <Modal
-        opened={renameOpen}
-        onClose={() => !nameSaving && setRenameOpen(false)}
-        title="Renommer le mix"
+        opened={settingsOpen}
+        onClose={() => !settingsSaving && setSettingsOpen(false)}
+        title="Paramètres du mix"
         centered
       >
-        <TextInput
-          label="Nom"
-          value={nameDraft}
-          onChange={(e) => setNameDraft(e.currentTarget.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') void handleSaveName();
-          }}
-          mb="md"
-          autoFocus
-        />
-        <Group justify="flex-end" gap="xs">
-          <Button variant="default" onClick={() => setRenameOpen(false)} disabled={nameSaving}>
+        <Stack gap="md">
+          <TextInput
+            label="Nom"
+            value={nameDraft}
+            onChange={(e) => setNameDraft(e.currentTarget.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') void handleSaveSettings();
+            }}
+            autoFocus
+          />
+          <Switch
+            label="Persistant"
+            description={
+              persistentDraft
+                ? 'Le mix est conservé sans date d’expiration.'
+                : 'Le mix expirera dans les prochaines 24 heures (comptées depuis l’enregistrement).'
+            }
+            checked={persistentDraft}
+            onChange={(e) => setPersistentDraft(e.currentTarget.checked)}
+          />
+        </Stack>
+        <Group justify="flex-end" gap="xs" mt="md">
+          <Button variant="default" onClick={() => setSettingsOpen(false)} disabled={settingsSaving}>
             Annuler
           </Button>
-          <Button loading={nameSaving} disabled={!nameValid || !nameDirty} onClick={() => void handleSaveName()}>
+          <Button
+            loading={settingsSaving}
+            disabled={!nameValid || !settingsDirty}
+            onClick={() => void handleSaveSettings()}
+          >
             Enregistrer
           </Button>
         </Group>
@@ -161,10 +197,10 @@ export default function MixDetailsPageClient({ mix }: MixDetailsPageClientProps)
                 variant="light"
                 color="orange"
                 size="lg"
-                onClick={openRenameModal}
-                aria-label="Renommer le mix"
+                onClick={openSettingsModal}
+                aria-label="Paramètres du mix"
               >
-                <IconPencil size={16} />
+                <IconSettings size={16} />
               </ActionIcon>
               <ActionIcon
                 variant="light"

@@ -151,10 +151,12 @@ export async function getMix(id: string): Promise<ServerActionResponse<MixWithTr
 
 const MIX_NAME_MAX = 200;
 
-export async function updateMixName(
+const MIX_TEMP_TTL_MS = 24 * 60 * 60 * 1000;
+
+export async function updateMixSettings(
   id: string,
-  name: string,
-): Promise<ServerActionResponse<{ name: string }>> {
+  input: { name: string; persistent: boolean },
+): Promise<ServerActionResponse<{ name: string; expiresAt: Date | null }>> {
   try {
     const session = await getAuthSession();
     if (!session) return { status: 401, error: 'Non autorisé' };
@@ -167,7 +169,7 @@ export async function updateMixName(
     const mixId = id?.trim();
     if (!mixId) return { status: 400, error: 'Mix introuvable' };
 
-    const trimmed = name.trim();
+    const trimmed = input.name.trim();
     if (!trimmed) return { status: 422, error: 'Le nom ne peut pas être vide' };
     if (trimmed.length > MIX_NAME_MAX) {
       return { status: 422, error: `Le nom ne peut pas dépasser ${MIX_NAME_MAX} caractères` };
@@ -182,18 +184,20 @@ export async function updateMixName(
       return { status: 403, error: 'Accès refusé' };
     }
 
+    const expiresAt = input.persistent ? null : new Date(Date.now() + MIX_TEMP_TTL_MS);
+
     const updated = await prisma.mix.update({
       where: { id: mixId },
-      data: { name: trimmed },
-      select: { name: true },
+      data: { name: trimmed, expiresAt },
+      select: { name: true, expiresAt: true },
     });
 
-    return { status: 200, data: { name: updated.name } };
+    return { status: 200, data: { name: updated.name, expiresAt: updated.expiresAt } };
   } catch (error) {
-    const parsed = actionErrorParser(error, 'Erreur lors de la mise à jour du nom');
+    const parsed = actionErrorParser(error, 'Erreur lors de la mise à jour du mix');
     return {
       status: parsed.status as 400 | 401 | 403 | 404 | 422 | 500,
-      error: typeof parsed.error === 'string' ? parsed.error : 'Erreur lors de la mise à jour du nom',
+      error: typeof parsed.error === 'string' ? parsed.error : 'Erreur lors de la mise à jour du mix',
     };
   }
 }

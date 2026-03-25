@@ -1,9 +1,9 @@
 'use client';
 
-import { useMemo, useState } from 'react';
-import { Alert, Card, Group, Stack, Text, TextInput, Title, Button, Badge, Modal } from '@mantine/core';
+import { useMemo, useState, type MouseEvent } from 'react';
+import { Alert, Card, Group, Stack, Text, TextInput, Title, Button, Badge, Modal, ActionIcon } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
-import { IconAlertCircle, IconSearch, IconMusic, IconTrash } from '@tabler/icons-react';
+import { IconAlertCircle, IconCheck, IconCopy, IconSearch, IconTrash } from '@tabler/icons-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { deleteMix, type MixSummary } from '@/app/_actions/mixes';
@@ -20,6 +20,7 @@ export default function MixesPageClient({ initialMixes }: MixesPageClientProps) 
   const [mixes, setMixes] = useState(initialMixes);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -30,6 +31,19 @@ export default function MixesPageClient({ initialMixes }: MixesPageClientProps) 
       return m.id.toLowerCase().includes(q) || creator.includes(q) || mixName.includes(q);
     });
   }, [mixes, query]);
+
+  const handleCopyMixLink = (e: MouseEvent<HTMLButtonElement>, m: MixSummary) => {
+    e.preventDefault();
+    e.stopPropagation();
+    navigator.clipboard.writeText(m.s3Url);
+    setCopiedId(m.id);
+    setTimeout(() => setCopiedId(null), 2000);
+    notifications.show({
+      title: 'Copié',
+      message: 'Lien du mix copié dans le presse-papiers',
+      color: 'blue',
+    });
+  };
 
   const handleConfirmDelete = async () => {
     if (!deleteId) return;
@@ -94,7 +108,15 @@ export default function MixesPageClient({ initialMixes }: MixesPageClientProps) 
       ) : (
         <Stack gap="sm">
           {filtered.map((m) => (
-            <Card key={m.id} withBorder radius="md" p="md">
+            <Card
+              key={m.id}
+              withBorder
+              radius="md"
+              p="md"
+              component={Link}
+              href={`${routes.mixes.index}/${m.id}`}
+              style={{ textDecoration: 'none', color: 'inherit' }}
+            >
               <Group justify="space-between" align="center" wrap="wrap">
                 <Stack gap={2}>
                   <Group gap="xs" wrap="wrap">
@@ -108,24 +130,33 @@ export default function MixesPageClient({ initialMixes }: MixesPageClientProps) 
                 </Stack>
 
                 <Group gap="xs">
-                  {m.canDelete && (
-                    <Button
-                      color="red"
-                      variant="light"
-                      leftSection={<IconTrash size={16} />}
-                      onClick={() => setDeleteId(m.id)}
-                    >
-                      Supprimer
-                    </Button>
-                  )}
-                  <Button
-                    component={Link}
-                    href={`${routes.mixes.index}/${m.id}`}
-                    leftSection={<IconMusic size={16} />}
-                    variant="default"
+                  <ActionIcon
+                    size="lg"
+                    variant="light"
+                    color={copiedId === m.id ? 'green' : undefined}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      handleCopyMixLink(e, m)
+                    }}
                   >
-                    Détails
-                  </Button>
+                    <IconCopy size={16} />
+                  </ActionIcon>
+                  {m.canDelete && (
+                    <ActionIcon
+                      size="lg"
+                      variant="light"
+                      color="red"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        setDeleteId(m.id)
+                      }}
+                      aria-label="Supprimer le mix"
+                    >
+                      <IconTrash size={16} />
+                    </ActionIcon>
+                  )}
                 </Group>
               </Group>
             </Card>
