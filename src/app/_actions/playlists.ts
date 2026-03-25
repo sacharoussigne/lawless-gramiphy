@@ -85,6 +85,7 @@ type PlaylistWithTracks = {
     id: string;
     title: string;
     artist: string | null;
+    youtubeUrl: string;
     duration: number | null;
     thumbnail: string | null;
     s3Url: string;
@@ -474,6 +475,7 @@ export async function getPlaylist(id: string): Promise<ServerActionResponse<Play
         id: pt.track.id,
         title: pt.track.title,
         artist: pt.track.artist,
+        youtubeUrl: pt.track.youtubeUrl,
         duration: pt.track.duration,
         thumbnail: pt.track.thumbnail,
         s3Url: pt.track.s3Url,

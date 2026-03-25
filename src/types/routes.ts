@@ -15,6 +15,9 @@ export const routes = {
   playlists: {
     index: '/playlists',
   },
+  mixes: {
+    index: '/mixes',
+  },
   auth: {
     index: '/auth',
     login: '/auth/login',

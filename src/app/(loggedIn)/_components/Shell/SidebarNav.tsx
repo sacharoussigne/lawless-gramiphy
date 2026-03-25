@@ -13,7 +13,7 @@ import {
 } from '@mantine/core';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { IconMusic, IconPlaylist, IconUsers, IconLogout } from '@tabler/icons-react';
+import { IconMusic, IconPlaylist, IconUsers, IconLogout, IconStack2 } from '@tabler/icons-react';
 import { routes } from '@/types/routes';
 import { usePermissions } from '@/app/_contexts/PermissionsContext';
 import { checkRolePermission, hasRole } from '@/lib/auth/permissions';
@@ -64,6 +64,11 @@ export default function SidebarNav({ session, onNavigate, collapsed }: SidebarNa
             href: routes.playlists.index,
             label: 'Playlists',
             icon: IconPlaylist,
+          },
+          {
+            href: routes.mixes.index,
+            label: 'Mixes',
+            icon: IconStack2,
           },
         ]
       : []),

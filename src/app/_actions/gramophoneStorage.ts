@@ -37,7 +37,7 @@ export async function getGramophoneStorageByUser(): Promise<
         _sum: { fileSizeMb: true },
         _count: { id: true },
       }),
-      prisma.exportedMix.groupBy({
+      prisma.mix.groupBy({
         by: ['userId'],
         _sum: { fileSizeMb: true },
         _count: { id: true },

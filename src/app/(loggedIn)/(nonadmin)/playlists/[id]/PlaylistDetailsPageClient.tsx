@@ -33,7 +33,7 @@ import {
 } from '@/app/_actions/playlists';
 import { handleAction } from '@/lib/action';
 import { notifications } from '@mantine/notifications';
-import { useEffect, useMemo, useState, type CSSProperties } from 'react';
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import Link from 'next/link';
 import { routes } from '@/types/routes';
 import {
@@ -98,7 +98,7 @@ export default function PlaylistDetailsPageClient({ playlist }: PlaylistDetailsP
   const [mixTrackIds, setMixTrackIds] = useState<string[]>([]);
   const [mixJobId, setMixJobId] = useState<string | null>(null);
   const [mixBusy, setMixBusy] = useState(false);
-  const [lastMixUrl, setLastMixUrl] = useState<string | null>(null);
+  const mixIdPollRef = useRef<string | null>(null);
   const [mixMode, setMixMode] = useState(false);
   const [collaboratorsModalOpen, setCollaboratorsModalOpen] = useState(false);
   const [editModalOpen, setEditModalOpen] = useState(false);
@@ -183,7 +183,7 @@ export default function PlaylistDetailsPageClient({ playlist }: PlaylistDetailsP
   const handleBuildMix = async () => {
     if (orderedPlaylistIds.length === 0) return;
     setMixBusy(true);
-    setLastMixUrl(null);
+    mixIdPollRef.current = null;
     try {
       const res = await fetch('/api/mixes/build', {
         method: 'POST',
@@ -199,7 +199,9 @@ export default function PlaylistDetailsPageClient({ playlist }: PlaylistDetailsP
         throw new Error(typeof json?.error === 'string' ? json.error : 'Impossible de créer le mix');
       }
       const jobId = json?.data?.jobId as string | undefined;
+      const newMixId = json?.data?.mixId as string | undefined;
       if (!jobId) throw new Error('Réponse serveur invalide');
+      mixIdPollRef.current = newMixId ?? null;
       setMixJobId(jobId);
     } catch (e: unknown) {
       const message = e instanceof Error ? e.message : 'Erreur inconnue';
@@ -221,17 +223,15 @@ export default function PlaylistDetailsPageClient({ playlist }: PlaylistDetailsP
         const data = json?.data;
         if (!data || cancelled) return;
 
-        if (data.status === 'done' && data.s3Url) {
+        if (data.status === 'done') {
           window.clearInterval(interval);
           setMixBusy(false);
           setMixJobId(null);
-          setLastMixUrl(data.s3Url);
-          await navigator.clipboard.writeText(data.s3Url);
-          notifications.show({
-            title: 'Mix prêt',
-            message: 'Lien du mix copié dans le presse-papiers',
-            color: 'green',
-          });
+          const finalMixId = (data.mixId as string | undefined) ?? mixIdPollRef.current;
+          mixIdPollRef.current = null;
+          if (finalMixId) {
+            router.push(`${routes.mixes.index}/${finalMixId}`);
+          }
         } else if (data.status === 'error') {
           window.clearInterval(interval);
           setMixBusy(false);
@@ -251,7 +251,7 @@ export default function PlaylistDetailsPageClient({ playlist }: PlaylistDetailsP
       cancelled = true;
       window.clearInterval(interval);
     };
-  }, [mixJobId]);
+  }, [mixJobId, router]);
 
   const handleRemove = async (track: PlaylistTrack) => {
     if (!playlist.canEdit) return;
@@ -582,7 +582,7 @@ export default function PlaylistDetailsPageClient({ playlist }: PlaylistDetailsP
                 }
                 leftSection={mixBusy ? <Loader size={14} color="white" /> : undefined}
               >
-                {mixBusy ? 'Génération…' : 'Générer et copier le lien'}
+                {mixBusy ? 'Génération…' : 'Générer le mix'}
               </Button>
             </Group>
           </Stack>
