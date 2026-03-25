@@ -93,7 +93,7 @@ export default function LibraryPageClient({ initialTracks }: LibraryPageClientPr
   const [mixTrackIds, setMixTrackIds] = useState<string[]>([]);
   const [mixJobId, setMixJobId] = useState<string | null>(null);
   const [mixBusy, setMixBusy] = useState(false);
-  const [lastMixUrl, setLastMixUrl] = useState<string | null>(null);
+  const [mixId, setMixId] = useState<string | null>(null);
   const [mixMode, setMixMode] = useState(false);
   const urlInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -137,7 +137,7 @@ export default function LibraryPageClient({ initialTracks }: LibraryPageClientPr
   const handleBuildMix = async () => {
     if (mixTrackIds.length < MIN_MIX_TRACK_COUNT) return;
     setMixBusy(true);
-    setLastMixUrl(null);
+    setMixId(null);
     try {
       const res = await fetch('/api/mixes/build', {
         method: 'POST',
@@ -150,8 +150,10 @@ export default function LibraryPageClient({ initialTracks }: LibraryPageClientPr
         throw new Error(typeof json?.error === 'string' ? json.error : 'Impossible de créer le mix');
       }
       const jobId = json?.data?.jobId as string | undefined;
+      const newMixId = json?.data?.mixId as string | undefined;
       if (!jobId) throw new Error('Réponse serveur invalide');
       setMixJobId(jobId);
+      if (newMixId) setMixId(newMixId);
     } catch (e: unknown) {
       const message = e instanceof Error ? e.message : 'Erreur inconnue';
       notifications.show({ title: 'Erreur', message, color: 'red' });
@@ -176,13 +178,14 @@ export default function LibraryPageClient({ initialTracks }: LibraryPageClientPr
           window.clearInterval(interval);
           setMixBusy(false);
           setMixJobId(null);
-          setLastMixUrl(data.s3Url);
           await navigator.clipboard.writeText(data.s3Url);
           notifications.show({
             title: 'Mix prêt',
             message: 'Lien du mix copié dans le presse-papiers',
             color: 'green',
           });
+          const finalMixId = (data.mixId as string | undefined) ?? mixId ?? null;
+          if (finalMixId) router.push(`${routes.mixes.index}/${finalMixId}`);
         } else if (data.status === 'error') {
           window.clearInterval(interval);
           setMixBusy(false);
@@ -202,7 +205,7 @@ export default function LibraryPageClient({ initialTracks }: LibraryPageClientPr
       cancelled = true;
       window.clearInterval(interval);
     };
-  }, [mixJobId]);
+  }, [mixJobId, mixId, router]);
 
   const openSpotlight = () => {
     if (loading) return;

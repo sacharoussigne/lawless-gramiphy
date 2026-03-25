@@ -5,6 +5,8 @@ import { actionErrorParser } from '@/lib/action';
 import { getAuthSession } from '@/lib/auth';
 import type { ServerActionResponse } from '@/types/api';
 import { checkRolePermission } from '@/lib/auth/permissions';
+import { buildMixS3Key } from '@/lib/mixes/mixConfig';
+import { deleteObjectFromBucket, resolveS3KeyFromStoredFields } from '@/lib/s3/deleteObject';
 
 export type MixSummary = {
   id: string;
@@ -14,6 +16,7 @@ export type MixSummary = {
   expiresAt: Date | null;
   s3Url: string;
   createdAt: Date;
+  canDelete: boolean;
 };
 
 export type MixWithTracks = {
@@ -23,6 +26,7 @@ export type MixWithTracks = {
   expiresAt: Date | null;
   s3Url: string;
   createdAt: Date;
+  canDelete: boolean;
   tracks: {
     id: string;
     title: string;
@@ -46,8 +50,10 @@ export async function getMixes(): Promise<ServerActionResponse<MixSummary[]>> {
       return { status: 403, error: 'Accès refusé' };
     }
 
+    const canManage = checkRolePermission(role, 'gramophone', 'manage');
+
     const mixes = await prisma.mix.findMany({
-      where: { userId: session.user.id },
+      where: canManage ? {} : { userId: session.user.id },
       orderBy: { createdAt: 'desc' },
       include: {
         tracks: { select: { id: true } },
@@ -64,6 +70,7 @@ export async function getMixes(): Promise<ServerActionResponse<MixSummary[]>> {
         expiresAt: m.expiresAt,
         s3Url: m.s3Url,
         createdAt: m.createdAt,
+        canDelete: m.userId === session.user.id || canManage,
       })),
     };
   } catch (error) {
@@ -85,8 +92,10 @@ export async function getMix(id: string): Promise<ServerActionResponse<MixWithTr
       return { status: 403, error: 'Accès refusé' };
     }
 
+    const canManage = checkRolePermission(role, 'gramophone', 'manage');
+
     const mix = await prisma.mix.findFirst({
-      where: { id, userId: session.user.id },
+      where: canManage ? { id } : { id, userId: session.user.id },
       include: {
         tracks: {
           orderBy: { position: 'asc' },
@@ -97,6 +106,8 @@ export async function getMix(id: string): Promise<ServerActionResponse<MixWithTr
 
     if (!mix) return { status: 404, error: 'Mix introuvable' };
 
+    const canDelete = mix.userId === session.user.id || canManage;
+
     return {
       status: 200,
       data: {
@@ -106,6 +117,7 @@ export async function getMix(id: string): Promise<ServerActionResponse<MixWithTr
         expiresAt: mix.expiresAt,
         s3Url: mix.s3Url,
         createdAt: mix.createdAt,
+        canDelete,
         tracks: mix.tracks.map((mt) => ({
           id: mt.track.id,
           title: mt.track.title,
@@ -124,6 +136,47 @@ export async function getMix(id: string): Promise<ServerActionResponse<MixWithTr
     return {
       status: parsed.status as 400 | 401 | 403 | 404 | 422 | 500,
       error: typeof parsed.error === 'string' ? parsed.error : 'Erreur lors du chargement du mix',
+    };
+  }
+}
+
+export async function deleteMix(id: string): Promise<ServerActionResponse<null>> {
+  try {
+    const session = await getAuthSession();
+    if (!session) return { status: 401, error: 'Non autorisé' };
+
+    const role = session.user.role ?? null;
+    if (!checkRolePermission(role, 'gramophone', 'access')) {
+      return { status: 403, error: 'Accès refusé' };
+    }
+
+    const mixId = id?.trim();
+    if (!mixId) return { status: 400, error: 'Mix introuvable' };
+
+    const mix = await prisma.mix.findUnique({ where: { id: mixId } });
+    if (!mix) return { status: 404, error: 'Mix introuvable' };
+
+    const canManage = checkRolePermission(role, 'gramophone', 'manage');
+    const isOwner = mix.userId === session.user.id;
+    if (!isOwner && !canManage) {
+      return { status: 403, error: 'Accès refusé' };
+    }
+
+    // Same principle as deleteTrack: delete the file on S3 first; abort DB delete if S3 fails.
+
+    const s3KeyToDelete =
+      resolveS3KeyFromStoredFields(mix.s3Key, mix.s3Url) ?? buildMixS3Key(mix.id);
+
+    await deleteObjectFromBucket({ key: s3KeyToDelete, logContext: `mix ${mix.id}` });
+
+    await prisma.mix.delete({ where: { id: mixId } });
+
+    return { status: 200, data: null };
+  } catch (error) {
+    const parsed = actionErrorParser(error, 'Erreur lors de la suppression du mix');
+    return {
+      status: parsed.status as 400 | 401 | 403 | 404 | 422 | 500,
+      error: typeof parsed.error === 'string' ? parsed.error : 'Erreur lors de la suppression du mix',
     };
   }
 }

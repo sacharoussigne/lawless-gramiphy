@@ -4,6 +4,7 @@ export type MixJobStatus = 'queued' | 'concatenating' | 'uploading' | 'done' | '
 
 export type MixJobPublic = {
   jobId: string;
+  mixId?: string;
   status: MixJobStatus;
   message: string | null;
   createdAt: number;
@@ -54,6 +55,7 @@ export function setMixJob(jobId: string, patch: Partial<MixJobInternal>) {
 export function toPublicMixJob(job: MixJobInternal): MixJobPublic {
   const base: MixJobPublic = {
     jobId: job.jobId,
+    mixId: job.mixId,
     status: job.status,
     message: job.message,
     createdAt: job.createdAt,

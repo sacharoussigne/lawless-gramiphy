@@ -1,10 +1,13 @@
 'use client';
 
-import { Alert, Badge, Button, Group, Stack, Text, Title } from '@mantine/core';
+import { Alert, Badge, Button, Group, Modal, Stack, Text, Title } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
-import { IconAlertCircle, IconCheck, IconCopy, IconMusic } from '@tabler/icons-react';
+import { IconAlertCircle, IconCheck, IconCopy, IconTrash } from '@tabler/icons-react';
 import { useMemo, useState } from 'react';
-import type { MixWithTracks } from '@/app/_actions/mixes';
+import { useRouter } from 'next/navigation';
+import { deleteMix, type MixWithTracks } from '@/app/_actions/mixes';
+import { handleAction } from '@/lib/action';
+import { routes } from '@/types/routes';
 import TrackRow from '../../../_components/Tracks/TrackRow';
 import useSingleAudioPlayer from '../../../_components/Tracks/useSingleAudioPlayer';
 
@@ -13,9 +16,12 @@ interface MixDetailsPageClientProps {
 }
 
 export default function MixDetailsPageClient({ mix }: MixDetailsPageClientProps) {
+  const router = useRouter();
   const audioPlayer = useSingleAudioPlayer();
   const [copiedTrackId, setCopiedTrackId] = useState<string | null>(null);
   const [copiedMix, setCopiedMix] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   const title = useMemo(() => 'Mix', []);
 
@@ -33,8 +39,39 @@ export default function MixDetailsPageClient({ mix }: MixDetailsPageClientProps)
     notifications.show({ title: 'Copié', message: 'Lien du mix copié dans le presse-papiers', color: 'blue' });
   };
 
+  const handleConfirmDelete = async () => {
+    setDeleting(true);
+    try {
+      const result = await deleteMix(mix.id);
+      handleAction(result);
+      notifications.show({ title: 'Supprimé', message: 'Le mix a été supprimé', color: 'green' });
+      setDeleteOpen(false);
+      router.push(routes.mixes.index);
+      router.refresh();
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : 'Erreur inconnue';
+      notifications.show({ title: 'Erreur', message, color: 'red' });
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   return (
     <Stack gap="md">
+      <Modal opened={deleteOpen} onClose={() => !deleting && setDeleteOpen(false)} title="Supprimer ce mix ?" centered>
+        <Text size="sm" c="dimmed" mb="md">
+          Cette action supprime le fichier sur le stockage et retire le mix de la liste. Elle est irréversible.
+        </Text>
+        <Group justify="flex-end" gap="xs">
+          <Button variant="default" onClick={() => setDeleteOpen(false)} disabled={deleting}>
+            Annuler
+          </Button>
+          <Button color="red" loading={deleting} onClick={() => void handleConfirmDelete()}>
+            Supprimer
+          </Button>
+        </Group>
+      </Modal>
+
       <Group justify="space-between" wrap="wrap" align="flex-end">
         <Stack gap={2}>
           <Group gap="xs" wrap="wrap">
@@ -46,14 +83,21 @@ export default function MixDetailsPageClient({ mix }: MixDetailsPageClientProps)
           </Text>
         </Stack>
 
-        <Button
-          onClick={handleCopyMix}
-          leftSection={copiedMix ? <IconCheck size={16} /> : <IconCopy size={16} />}
-          color={copiedMix ? 'green' : undefined}
-          variant="default"
-        >
-          {copiedMix ? 'Copié' : 'Copier le lien'}
-        </Button>
+        <Group gap="xs">
+          {mix.canDelete && (
+            <Button color="red" variant="light" leftSection={<IconTrash size={16} />} onClick={() => setDeleteOpen(true)}>
+              Supprimer
+            </Button>
+          )}
+          <Button
+            onClick={handleCopyMix}
+            leftSection={copiedMix ? <IconCheck size={16} /> : <IconCopy size={16} />}
+            color={copiedMix ? 'green' : undefined}
+            variant="default"
+          >
+            {copiedMix ? 'Copié' : 'Copier le lien'}
+          </Button>
+        </Group>
       </Group>
 
       {mix.tracks.length === 0 ? (

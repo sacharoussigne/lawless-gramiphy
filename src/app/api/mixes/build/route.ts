@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { actionErrorParser } from '@/lib/action';
 import { auth } from '@/lib/auth';
 import { checkRolePermission } from '@/lib/auth/permissions';
+import { createHash } from 'crypto';
 import {
   createMixJob,
   getMixJob,
@@ -48,6 +49,11 @@ export async function POST(request: NextRequest) {
     const jobId = `mix_${Date.now()}_${Math.random().toString(16).slice(2)}`;
     createMixJob({ jobId, userId: session.user.id });
 
+    const mixId = createHash('sha256')
+      .update(`${session.user.id}:${resolved.orderedTracks.map((t) => t.id).join('|')}`)
+      .digest('hex');
+    setMixJob(jobId, { mixId });
+
     void runExportedMixJob({
       jobId,
       userId: session.user.id,
@@ -55,7 +61,7 @@ export async function POST(request: NextRequest) {
       totalSeconds: resolved.totalSeconds,
     });
 
-    return NextResponse.json({ status: 200, data: { jobId } }, { status: 200 });
+    return NextResponse.json({ status: 200, data: { jobId, mixId } }, { status: 200 });
   } catch (error) {
     const parsed = actionErrorParser(error, 'Erreur lors de la création du mix');
     return NextResponse.json(
