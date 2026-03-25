@@ -10,6 +10,7 @@ import { DeleteObjectCommand, GetObjectCommand, HeadObjectCommand, PutObjectComm
 import prisma from '@/lib/prisma';
 import { buildFfmpegLocalConcatArgs } from '@/lib/mixes/ffmpegConcatArgs';
 import { resolveFfmpegCommand } from '@/lib/mixes/ffmpegCommand';
+import { buildMixS3Key, buildMixS3Url, getMixBucketRegion, getMixRenewWindowMs } from '@/lib/mixes/mixConfig';
 import { getMixJob, removeMixJob, setMixJob } from '@/lib/mixes/mixJobs';
 import type { ResolvedMixTrack } from '@/lib/mixes/resolveMixTracks';
 
@@ -60,19 +61,17 @@ export async function runExportedMixJob(options: {
   totalSeconds: number;
 }) {
   const { jobId, userId, playlistId, orderedTracks, totalSeconds } = options;
-  const bucket = process.env.AWS_S3_BUCKET!;
-  const region = process.env.AWS_REGION!;
+  const { bucket, region } = getMixBucketRegion();
 
   // Mix signature stable for a user + ordered trackIds.
   // This allows overwriting the same S3 key to "renew" the object without breaking URLs.
   const mixId = createHash('sha256')
     .update(`${userId}:${orderedTracks.map((t) => t.id).join('|')}`)
     .digest('hex');
-  const mixesPrefix = (process.env.MIXES_S3_PREFIX ?? 'mixes').replace(/^\/+|\/+$/g, '');
-  const s3Key = `${mixesPrefix}/${mixId}.mp3`;
-  const s3Url = `https://${bucket}.s3.${region}.amazonaws.com/${s3Key}`;
+  const s3Key = buildMixS3Key(mixId);
+  const s3Url = buildMixS3Url(bucket, region, s3Key);
 
-  const expiresAfterMs = 23 * 60 * 60 * 1000;
+  const expiresAfterMs = getMixRenewWindowMs();
   const now = Date.now();
 
   let mixObjectExistsInS3 = false;
