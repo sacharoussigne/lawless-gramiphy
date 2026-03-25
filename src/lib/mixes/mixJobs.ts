@@ -4,6 +4,7 @@ export type MixJobStatus = 'queued' | 'concatenating' | 'uploading' | 'done' | '
 
 export type MixJobPublic = {
   jobId: string;
+  mixId?: string;
   status: MixJobStatus;
   message: string | null;
   createdAt: number;
@@ -58,6 +59,7 @@ export function toPublicMixJob(job: MixJobInternal): MixJobPublic {
     message: job.message,
     createdAt: job.createdAt,
   };
+  if (job.mixId) base.mixId = job.mixId;
   if (job.status === 'done' && job.s3Url) base.s3Url = job.s3Url;
   if (job.status === 'error' && job.error) base.error = job.error;
   return base;

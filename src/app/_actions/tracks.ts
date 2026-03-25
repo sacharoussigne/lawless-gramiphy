@@ -3,17 +3,9 @@
 import prisma from '@/lib/prisma';
 import { actionErrorParser } from '@/lib/action';
 import { getAuthSession } from '@/lib/auth';
-import { S3Client, DeleteObjectCommand } from '@aws-sdk/client-s3';
 import type { ServerActionResponse } from '@/types/api';
 import { checkRolePermission } from '@/lib/auth/permissions';
-
-const s3 = new S3Client({
-  region: process.env.AWS_REGION!,
-  credentials: {
-    accessKeyId: process.env.AWS_ACCESS_KEY_ID!,
-    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY!,
-  },
-});
+import { deleteObjectFromBucket, resolveS3KeyFromStoredFields } from '@/lib/s3/deleteObject';
 
 type Track = {
   id: string;
@@ -202,43 +194,10 @@ export async function deleteTrack(id: string): Promise<ServerActionResponse<null
       };
     }
 
-    // We want DB delete to be cancelled if S3 delete fails,
-    // so we resolve and delete on S3 *before* deleting the row.
-
-    // Resolve S3 key
-    let s3KeyToDelete: string | null = track.s3Key ?? null;
-
-    // Backward compatibility: older tracks may not have s3Key renseigné
-    if (!s3KeyToDelete && track.s3Url) {
-      try {
-        const url = new URL(track.s3Url);
-        // pathname starts with '/', remove it
-        s3KeyToDelete = url.pathname.startsWith('/') ? url.pathname.slice(1) : url.pathname;
-      } catch {
-        s3KeyToDelete = null;
-      }
-    }
+    const s3KeyToDelete = resolveS3KeyFromStoredFields(track.s3Key, track.s3Url);
 
     if (s3KeyToDelete) {
-      try {
-        const result = await s3.send(
-          new DeleteObjectCommand({
-            Bucket: process.env.AWS_S3_BUCKET!,
-            Key: s3KeyToDelete,
-          }),
-        );
-
-        const status = result.$metadata.httpStatusCode ?? 0;
-        if (status >= 300) {
-          throw new Error(
-            `Échec de la suppression S3 (code HTTP ${status}) pour la clé ${s3KeyToDelete}`,
-          );
-        }
-      } catch (err) {
-        console.error('Failed to delete S3 object for track', track.id, s3KeyToDelete, err);
-        // Do not touch DB if file is not removed on S3
-        throw err;
-      }
+      await deleteObjectFromBucket({ key: s3KeyToDelete, logContext: `track ${track.id}` });
     }
 
     // Only delete from DB if S3 delete above did not throw

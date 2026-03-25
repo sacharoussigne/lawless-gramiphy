@@ -25,7 +25,7 @@ model User {
   playlists             Playlist[]
   playlistCollaborators PlaylistCollaborator[]
   pinnedPlaylists       PinnedPlaylist[]
-  exportedMixes         ExportedMix[]
+  mixes                 Mix[]
 
   @@unique([email])
   @@map("user")
@@ -95,6 +95,7 @@ model Track {
   uploaderName    String?
   uploader        User?           @relation(fields: [uploaderId], references: [id], onDelete: SetNull)
   playlistEntries PlaylistTrack[]
+  mixEntries      MixTrack[]
   createdAt       DateTime        @default(now())
   updatedAt       DateTime        @updatedAt
 
@@ -161,18 +162,34 @@ model PlaylistCollaborator {
   @@map("playlist_collaborators")
 }
 
-model ExportedMix {
-  id                   String   @id @default(cuid())
+model Mix {
+  id                   String     @id @default(cuid())
+  name                 String     @default("Mix")
   s3Key                String
   s3Url                String
   totalDurationSeconds Int
   fileSizeMb           Float
+  expiresAt            DateTime?
   userId               String
-  user                 User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  playlistId           String?
-  trackIds             String[]
-  createdAt            DateTime @default(now())
+  user                 User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tracks               MixTrack[]
+  createdAt            DateTime   @default(now())
 
   @@index([userId])
-  @@map("exported_mixes")
+  @@map("mixes")
+}
+
+model MixTrack {
+  id        String   @id @default(cuid())
+  mixId     String
+  trackId   String
+  position  Int
+  mix       Mix      @relation(fields: [mixId], references: [id], onDelete: Cascade)
+  track     Track    @relation(fields: [trackId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([mixId, trackId])
+  @@index([mixId])
+  @@index([trackId])
+  @@map("mix_tracks")
 }
