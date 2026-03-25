@@ -81,6 +81,19 @@ export default function TrackDetailsPageClient({ track }: { track: Track }) {
     }
   };
 
+  const handleCopyYoutube = async () => {
+    try {
+      await navigator.clipboard.writeText(track.youtubeUrl);
+      notifications.show({
+        title: 'Copié',
+        message: 'Lien YouTube copié dans le presse-papiers',
+        color: 'blue',
+      });
+    } catch {
+      setError('Impossible de copier le lien YouTube');
+    }
+  };
+
   const handleDelete = async () => {
     if (!track.canDelete) return;
     setDeleting(true);
@@ -256,9 +269,14 @@ export default function TrackDetailsPageClient({ track }: { track: Track }) {
           </Group>
 
           <Group justify="space-between" wrap="nowrap">
-            <Button variant="default" leftSection={<IconCopy size={14} />} onClick={handleCopy}>
-              {copied ? 'Copié' : 'Copier'}
-            </Button>
+            <Group gap="xs" wrap="nowrap">
+              <Button variant="default" leftSection={<IconCopy size={14} />} onClick={handleCopy}>
+                {copied ? 'Copié' : 'Copier'}
+              </Button>
+              <Button variant="subtle" onClick={handleCopyYoutube}>
+                YouTube
+              </Button>
+            </Group>
             <ActionIcon
               variant="subtle"
               size="lg"

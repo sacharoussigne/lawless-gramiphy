@@ -2,10 +2,6 @@ export function getMixesPrefix(): string {
   return (process.env.MIXES_S3_PREFIX ?? 'mixes').replace(/^\/+|\/+$/g, '');
 }
 
-export function getMixRenewWindowMs(): number {
-  return 23 * 60 * 60 * 1000;
-}
-
 export function getMixBucketRegion(): { bucket: string; region: string } {
   return {
     bucket: process.env.AWS_S3_BUCKET!,

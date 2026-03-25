@@ -51,7 +51,6 @@ export async function POST(request: NextRequest) {
     void runExportedMixJob({
       jobId,
       userId: session.user.id,
-      playlistId: resolved.playlistId,
       orderedTracks: resolved.orderedTracks,
       totalSeconds: resolved.totalSeconds,
     });

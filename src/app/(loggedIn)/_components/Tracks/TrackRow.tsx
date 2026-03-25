@@ -7,11 +7,13 @@ import {
   IconCheck,
   IconCopy,
   IconDotsVertical,
+  IconBrandYoutube,
   IconPlaylist,
   IconPlayerPause,
   IconPlayerPlay,
   IconTrash,
 } from '@tabler/icons-react';
+import { notifications } from '@mantine/notifications';
 
 type TrackShape = {
   id: string;
@@ -193,6 +195,21 @@ export default function TrackRow<TTrack extends TrackShape>({
               </Menu.Target>
               <Menu.Dropdown>
                 <Menu.Label>Actions</Menu.Label>
+                  {track.youtubeUrl ? (
+                    <Menu.Item
+                      onClick={async () => {
+                        await navigator.clipboard.writeText(track.youtubeUrl!);
+                        notifications.show({
+                          title: 'Copié',
+                          message: 'Lien YouTube copié dans le presse-papiers',
+                          color: 'blue',
+                        });
+                      }}
+                      leftSection={<IconBrandYoutube size={16} />}
+                    >
+                      Copier le lien YouTube
+                    </Menu.Item>
+                  ) : null}
                 {showAddToPlaylist && onOpenAddToPlaylistMenu && (
                   <Menu.Item
                     onClick={() => onOpenAddToPlaylistMenu(track)}
