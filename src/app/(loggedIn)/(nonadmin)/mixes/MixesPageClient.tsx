@@ -1,7 +1,20 @@
 'use client';
 
 import { useMemo, useState, type MouseEvent } from 'react';
-import { Alert, Card, Group, Stack, Text, TextInput, Title, Button, Badge, Modal, ActionIcon } from '@mantine/core';
+import {
+  ActionIcon,
+  Alert,
+  Badge,
+  Button,
+  Card,
+  Group,
+  Modal,
+  SegmentedControl,
+  Stack,
+  Text,
+  TextInput,
+  Title,
+} from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { IconAlertCircle, IconCheck, IconCopy, IconSearch, IconTrash } from '@tabler/icons-react';
 import Link from 'next/link';
@@ -14,8 +27,11 @@ interface MixesPageClientProps {
   initialMixes: MixSummary[];
 }
 
+type MixScopeFilter = 'all' | 'temp' | 'persistent';
+
 export default function MixesPageClient({ initialMixes }: MixesPageClientProps) {
   const router = useRouter();
+  const [scope, setScope] = useState<MixScopeFilter>('all');
   const [query, setQuery] = useState('');
   const [mixes, setMixes] = useState(initialMixes);
   const [deleteId, setDeleteId] = useState<string | null>(null);
@@ -23,14 +39,21 @@ export default function MixesPageClient({ initialMixes }: MixesPageClientProps) 
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
   const filtered = useMemo(() => {
+    let list = mixes;
+    if (scope === 'temp') {
+      list = list.filter((m) => m.expiresAt != null);
+    } else if (scope === 'persistent') {
+      list = list.filter((m) => m.expiresAt == null);
+    }
+
     const q = query.trim().toLowerCase();
-    if (!q) return mixes;
-    return mixes.filter((m) => {
+    if (!q) return list;
+    return list.filter((m) => {
       const creator = (m.creatorName ?? '').toLowerCase();
       const mixName = m.name.toLowerCase();
       return m.id.toLowerCase().includes(q) || creator.includes(q) || mixName.includes(q);
     });
-  }, [mixes, query]);
+  }, [mixes, query, scope]);
 
   const handleCopyMixLink = (e: MouseEvent<HTMLButtonElement>, m: MixSummary) => {
     e.preventDefault();
@@ -92,13 +115,24 @@ export default function MixesPageClient({ initialMixes }: MixesPageClientProps) 
           </Text>
         </Stack>
 
-        <TextInput
-          value={query}
-          onChange={(e) => setQuery(e.currentTarget.value)}
-          leftSection={<IconSearch size={16} />}
-          placeholder="Rechercher…"
-          w={320}
-        />
+        <Group gap="sm" wrap="wrap" align="flex-end">
+          <SegmentedControl
+            value={scope}
+            onChange={(v) => setScope(v as MixScopeFilter)}
+            data={[
+              { label: 'Tous', value: 'all' },
+              { label: 'Temporaires', value: 'temp' },
+              { label: 'Persistants', value: 'persistent' },
+            ]}
+          />
+          <TextInput
+            value={query}
+            onChange={(e) => setQuery(e.currentTarget.value)}
+            leftSection={<IconSearch size={16} />}
+            placeholder="Rechercher…"
+            w={320}
+          />
+        </Group>
       </Group>
 
       {filtered.length === 0 ? (

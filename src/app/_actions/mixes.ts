@@ -5,8 +5,7 @@ import { actionErrorParser } from '@/lib/action';
 import { getAuthSession } from '@/lib/auth';
 import type { ServerActionResponse } from '@/types/api';
 import { checkRolePermission } from '@/lib/auth/permissions';
-import { buildMixS3Key } from '@/lib/mixes/mixConfig';
-import { deleteObjectFromBucket, resolveS3KeyFromStoredFields } from '@/lib/s3/deleteObject';
+import { deleteMixArtifacts } from '@/lib/mixes/deleteMixArtifacts';
 
 export type MixSummary = {
   id: string;
@@ -224,14 +223,7 @@ export async function deleteMix(id: string): Promise<ServerActionResponse<null>>
       return { status: 403, error: 'Accès refusé' };
     }
 
-    // Same principle as deleteTrack: delete the file on S3 first; abort DB delete if S3 fails.
-
-    const s3KeyToDelete =
-      resolveS3KeyFromStoredFields(mix.s3Key, mix.s3Url) ?? buildMixS3Key(mix.id);
-
-    await deleteObjectFromBucket({ key: s3KeyToDelete, logContext: `mix ${mix.id}` });
-
-    await prisma.mix.delete({ where: { id: mixId } });
+    await deleteMixArtifacts(mix);
 
     return { status: 200, data: null };
   } catch (error) {
