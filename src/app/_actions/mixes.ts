@@ -11,7 +11,7 @@ export type MixSummary = {
   tracksCount: number;
   totalDurationSeconds: number;
   fileSizeMb: number;
-  isPersistent: boolean;
+  expiresAt: Date | null;
   s3Url: string;
   createdAt: Date;
 };
@@ -20,7 +20,7 @@ export type MixWithTracks = {
   id: string;
   totalDurationSeconds: number;
   fileSizeMb: number;
-  isPersistent: boolean;
+  expiresAt: Date | null;
   s3Url: string;
   createdAt: Date;
   tracks: {
@@ -61,7 +61,7 @@ export async function getMixes(): Promise<ServerActionResponse<MixSummary[]>> {
         tracksCount: m.tracks.length,
         totalDurationSeconds: m.totalDurationSeconds,
         fileSizeMb: m.fileSizeMb,
-        isPersistent: m.isPersistent,
+        expiresAt: m.expiresAt,
         s3Url: m.s3Url,
         createdAt: m.createdAt,
       })),
@@ -103,7 +103,7 @@ export async function getMix(id: string): Promise<ServerActionResponse<MixWithTr
         id: mix.id,
         totalDurationSeconds: mix.totalDurationSeconds,
         fileSizeMb: mix.fileSizeMb,
-        isPersistent: mix.isPersistent,
+        expiresAt: mix.expiresAt,
         s3Url: mix.s3Url,
         createdAt: mix.createdAt,
         tracks: mix.tracks.map((mt) => ({

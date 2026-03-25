@@ -53,7 +53,7 @@ export default function MixesPageClient({ initialMixes }: MixesPageClientProps) 
                 <Stack gap={2}>
                   <Group gap="xs" wrap="wrap">
                     <Text fw={600}>Mix</Text>
-                    {m.isPersistent ? <Badge color="green">Persistent</Badge> : <Badge color="gray">Temp</Badge>}
+                    {m.expiresAt == null ? <Badge color="green">Persistent</Badge> : <Badge color="gray">Temp</Badge>}
                   </Group>
                   <Text c="dimmed" size="sm">
                     {m.tracksCount} piste(s) · {Math.round(m.totalDurationSeconds / 60)} min · {m.fileSizeMb.toFixed(2)} MB

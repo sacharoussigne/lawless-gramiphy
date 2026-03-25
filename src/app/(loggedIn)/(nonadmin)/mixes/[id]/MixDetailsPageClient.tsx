@@ -39,7 +39,7 @@ export default function MixDetailsPageClient({ mix }: MixDetailsPageClientProps)
         <Stack gap={2}>
           <Group gap="xs" wrap="wrap">
             <Title order={2}>{title}</Title>
-            {mix.isPersistent ? <Badge color="green">Persistent</Badge> : <Badge color="gray">Temp</Badge>}
+            {mix.expiresAt == null ? <Badge color="green">Persistent</Badge> : <Badge color="gray">Temp</Badge>}
           </Group>
           <Text c="dimmed" size="sm">
             {mix.tracks.length} piste(s) · {Math.round(mix.totalDurationSeconds / 60)} min · {mix.fileSizeMb.toFixed(2)} MB

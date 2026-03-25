@@ -70,8 +70,13 @@ export async function runExportedMixJob(options: {
   const s3Url = buildMixS3Url(bucket, region, s3Key);
 
   let mixObjectExistsInS3 = false;
+  let existingMixRecord: { expiresAt: Date | null } | null = null;
   try {
-    const existingMix = await prisma.mix.findUnique({ where: { id: mixId } });
+    const existingMix = await prisma.mix.findUnique({
+      where: { id: mixId },
+      select: { s3Url: true, expiresAt: true },
+    });
+    existingMixRecord = existingMix ? { expiresAt: existingMix.expiresAt } : null;
 
     // If a record exists, check whether the object is still available in S3.
     if (existingMix) {
@@ -159,6 +164,11 @@ export async function runExportedMixJob(options: {
     );
 
     await prisma.$transaction(async (tx) => {
+      const nextExpiresAt =
+        existingMixRecord?.expiresAt === null
+          ? null
+          : new Date(Date.now() + 24 * 60 * 60 * 1000);
+
       await tx.mix.upsert({
         where: { id: mixId },
         update: {
@@ -166,6 +176,7 @@ export async function runExportedMixJob(options: {
           s3Url,
           totalDurationSeconds: totalSeconds,
           fileSizeMb,
+          expiresAt: nextExpiresAt,
         },
         create: {
           id: mixId,
@@ -174,7 +185,7 @@ export async function runExportedMixJob(options: {
           totalDurationSeconds: totalSeconds,
           fileSizeMb,
           userId,
-          isPersistent: false,
+          expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
         },
       });
 

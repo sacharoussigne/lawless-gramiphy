@@ -168,7 +168,7 @@ model Mix {
   s3Url                String
   totalDurationSeconds Int
   fileSizeMb           Float
-  isPersistent         Boolean    @default(false)
+  expiresAt            DateTime?
   userId               String
   user                 User       @relation(fields: [userId], references: [id], onDelete: Cascade)
   tracks               MixTrack[]
