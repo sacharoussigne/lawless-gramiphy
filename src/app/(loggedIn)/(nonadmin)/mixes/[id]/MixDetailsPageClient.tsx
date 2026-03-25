@@ -25,6 +25,8 @@ export default function MixDetailsPageClient({ mix }: MixDetailsPageClientProps)
 
   const title = useMemo(() => 'Mix', []);
 
+  const creatorLabel = mix.creatorName ?? 'Inconnu';
+
   const handleCopyTrack = (s3Url: string, id: string) => {
     navigator.clipboard.writeText(s3Url);
     setCopiedTrackId(id);
@@ -79,7 +81,8 @@ export default function MixDetailsPageClient({ mix }: MixDetailsPageClientProps)
             {mix.expiresAt == null ? <Badge color="green">Persistent</Badge> : <Badge color="gray">Temp</Badge>}
           </Group>
           <Text c="dimmed" size="sm">
-            {mix.tracks.length} piste(s) · {Math.round(mix.totalDurationSeconds / 60)} min · {mix.fileSizeMb.toFixed(2)} MB
+            Par {creatorLabel} · {mix.tracks.length} piste(s) · {Math.round(mix.totalDurationSeconds / 60)} min ·{' '}
+            {mix.fileSizeMb.toFixed(2)} MB
           </Text>
         </Stack>
 

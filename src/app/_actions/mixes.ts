@@ -10,6 +10,7 @@ import { deleteObjectFromBucket, resolveS3KeyFromStoredFields } from '@/lib/s3/d
 
 export type MixSummary = {
   id: string;
+  creatorName: string | null;
   tracksCount: number;
   totalDurationSeconds: number;
   fileSizeMb: number;
@@ -21,6 +22,7 @@ export type MixSummary = {
 
 export type MixWithTracks = {
   id: string;
+  creatorName: string | null;
   totalDurationSeconds: number;
   fileSizeMb: number;
   expiresAt: Date | null;
@@ -53,10 +55,10 @@ export async function getMixes(): Promise<ServerActionResponse<MixSummary[]>> {
     const canManage = checkRolePermission(role, 'gramophone', 'manage');
 
     const mixes = await prisma.mix.findMany({
-      where: canManage ? {} : { userId: session.user.id },
       orderBy: { createdAt: 'desc' },
       include: {
         tracks: { select: { id: true } },
+        user: { select: { name: true } },
       },
     });
 
@@ -64,6 +66,7 @@ export async function getMixes(): Promise<ServerActionResponse<MixSummary[]>> {
       status: 200,
       data: mixes.map((m) => ({
         id: m.id,
+        creatorName: m.user?.name ?? null,
         tracksCount: m.tracks.length,
         totalDurationSeconds: m.totalDurationSeconds,
         fileSizeMb: m.fileSizeMb,
@@ -95,8 +98,9 @@ export async function getMix(id: string): Promise<ServerActionResponse<MixWithTr
     const canManage = checkRolePermission(role, 'gramophone', 'manage');
 
     const mix = await prisma.mix.findFirst({
-      where: canManage ? { id } : { id, userId: session.user.id },
+      where: { id },
       include: {
+        user: { select: { name: true } },
         tracks: {
           orderBy: { position: 'asc' },
           include: { track: true },
@@ -112,6 +116,7 @@ export async function getMix(id: string): Promise<ServerActionResponse<MixWithTr
       status: 200,
       data: {
         id: mix.id,
+        creatorName: mix.user?.name ?? null,
         totalDurationSeconds: mix.totalDurationSeconds,
         fileSizeMb: mix.fileSizeMb,
         expiresAt: mix.expiresAt,

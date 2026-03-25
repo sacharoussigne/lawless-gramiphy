@@ -25,7 +25,8 @@ export default function MixesPageClient({ initialMixes }: MixesPageClientProps) 
     const q = query.trim().toLowerCase();
     if (!q) return mixes;
     return mixes.filter((m) => {
-      return m.id.toLowerCase().includes(q);
+      const creator = (m.creatorName ?? '').toLowerCase();
+      return m.id.toLowerCase().includes(q) || creator.includes(q);
     });
   }, [mixes, query]);
 
@@ -72,7 +73,7 @@ export default function MixesPageClient({ initialMixes }: MixesPageClientProps) 
         <Stack gap={2}>
           <Title order={2}>Mixes</Title>
           <Text c="dimmed" size="sm">
-            Tes mixes exportés
+            Tous les mixes, du plus récent au plus ancien
           </Text>
         </Stack>
 
@@ -100,7 +101,8 @@ export default function MixesPageClient({ initialMixes }: MixesPageClientProps) 
                     {m.expiresAt == null ? <Badge color="green">Persistent</Badge> : <Badge color="gray">Temp</Badge>}
                   </Group>
                   <Text c="dimmed" size="sm">
-                    {m.tracksCount} piste(s) · {Math.round(m.totalDurationSeconds / 60)} min · {m.fileSizeMb.toFixed(2)} MB
+                    Par {m.creatorName ?? 'Inconnu'} · {m.tracksCount} piste(s) · {Math.round(m.totalDurationSeconds / 60)}{' '}
+                    min · {m.fileSizeMb.toFixed(2)} MB
                   </Text>
                 </Stack>
 
