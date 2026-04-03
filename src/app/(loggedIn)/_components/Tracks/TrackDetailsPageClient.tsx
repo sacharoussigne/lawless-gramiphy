@@ -2,7 +2,6 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import Link from 'next/link';
 import {
   ActionIcon,
   Alert,
@@ -143,9 +142,6 @@ export default function TrackDetailsPageClient({ track }: { track: Track }) {
         </Stack>
 
         <Group gap="xs">
-          <Button size="sm" variant="subtle" component={Link} href={routes.library.index}>
-            Bibliothèque
-          </Button>
           <ActionIcon
             size="lg"
             variant="light"

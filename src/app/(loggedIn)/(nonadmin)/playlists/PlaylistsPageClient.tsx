@@ -16,7 +16,7 @@ import {
   ActionIcon,
   Tooltip,
 } from '@mantine/core';
-import { IconAlertCircle, IconMusic, IconPlayerPlay, IconPin, IconPinnedOff } from '@tabler/icons-react';
+import { IconAlertCircle, IconMusic, IconPin, IconPinnedOff } from '@tabler/icons-react';
 import { useRouter } from 'next/navigation';
 import { createPlaylist, deletePlaylist, togglePinnedPlaylist } from '@/app/_actions/playlists';
 import { handleAction } from '@/lib/action';
@@ -197,15 +197,6 @@ export default function PlaylistsPageClient({
             </Group>
           </Stack>
           <Group gap="xs">
-            <Button
-              size="sm"
-              variant="subtle"
-              leftSection={<IconPlayerPlay size={14} />}
-              component={Link}
-              href={routes.library.index}
-            >
-              Revenir à la bibliothèque
-            </Button>
             <Button size="sm" onClick={() => setCreateModalOpen(true)}>
               Nouvelle playlist
             </Button>
