@@ -11,9 +11,17 @@ import {
   Tooltip,
   Group,
 } from '@mantine/core';
+import { notifications } from '@mantine/notifications';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { IconMusic, IconPlaylist, IconUsers, IconLogout, IconStack2 } from '@tabler/icons-react';
+import {
+  IconMusic,
+  IconPlaylist,
+  IconUsers,
+  IconLogout,
+  IconStack2,
+  IconArrowBack,
+} from '@tabler/icons-react';
 import { routes } from '@/types/routes';
 import { usePermissions } from '@/app/_contexts/PermissionsContext';
 import { checkRolePermission, hasRole } from '@/lib/auth/permissions';
@@ -42,7 +50,9 @@ export default function SidebarNav({ session, onNavigate, collapsed }: SidebarNa
   const router = useRouter();
   const { userRole } = usePermissions();
   const [pinned, setPinned] = useState<PinnedPlaylistSummary[]>([]);
+  const [stoppingImpersonation, setStoppingImpersonation] = useState(false);
   const userId = session?.user?.id ?? null;
+  const isImpersonating = Boolean(session?.session?.impersonatedBy);
 
   const canAccessGramophone = useMemo(
     () => checkRolePermission(userRole, 'gramophone', 'access'),
@@ -84,6 +94,32 @@ export default function SidebarNav({ session, onNavigate, collapsed }: SidebarNa
         },
       },
     });
+  };
+
+  const handleStopImpersonating = async () => {
+    setStoppingImpersonation(true);
+    try {
+      const result = await authClient.admin.stopImpersonating();
+      if (result.error) {
+        notifications.show({
+          title: 'Erreur',
+          message: result.error.message ?? "Impossible de quitter l'impersonation",
+          color: 'red',
+        });
+        return;
+      }
+      router.refresh();
+      window.location.href = '/';
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Erreur inattendue';
+      notifications.show({
+        title: 'Erreur',
+        message,
+        color: 'red',
+      });
+    } finally {
+      setStoppingImpersonation(false);
+    }
   };
 
   const loadPinned = useCallback(async () => {
@@ -233,6 +269,18 @@ export default function SidebarNav({ session, onNavigate, collapsed }: SidebarNa
                 )
               }
             />
+            {isImpersonating && (
+              <Button
+                variant="subtle"
+                color="red"
+                leftSection={<IconArrowBack size={16} stroke={1.7} />}
+                onClick={handleStopImpersonating}
+                loading={stoppingImpersonation}
+                justify="flex-start"
+              >
+                {collapsed ? null : 'Revenir à mon compte'}
+              </Button>
+            )}
             <Button
               variant="subtle"
               color="red"
