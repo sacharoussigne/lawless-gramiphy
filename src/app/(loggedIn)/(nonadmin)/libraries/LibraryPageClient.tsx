@@ -538,15 +538,6 @@ export default function LibraryPageClient({ initialTracks }: LibraryPageClientPr
           <Group gap="xs" align="center">
             <Button
               size="sm"
-              variant="filled"
-              leftSection={<IconPlaylist size={16} />}
-              component={Link}
-              href={routes.playlists.index}
-            >
-              Playlists
-            </Button>
-            <Button
-              size="sm"
               variant="light"
               leftSection={<IconPlus size={16} />}
               onClick={openSpotlight}
