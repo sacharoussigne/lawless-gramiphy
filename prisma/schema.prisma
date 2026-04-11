@@ -93,7 +93,7 @@ model Track {
   thumbnail       String?
   uploaderId      String?
   uploaderName    String?
-  uploader        User?           @relation(fields: [uploaderId], references: [id], onDelete: SetNull)
+  uploader        User?           @relation(fields: [uploaderId], references: [id], onDelete: Cascade)
   playlistEntries PlaylistTrack[]
   mixEntries      MixTrack[]
   createdAt       DateTime        @default(now())

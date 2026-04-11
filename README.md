@@ -69,6 +69,7 @@ Optional:
 - **Discord login** — `DISCORD_CLIENT_ID` and `DISCORD_CLIENT_SECRET`
 - **Mix duration limit** — `NEXT_PUBLIC_MIX_DISABLE_DURATION_LIMIT` (`1` to disable limit, `0` to enforce)
 - **Mix encoding** — `MIX_MP3_DEFAULT_BITRATE` (e.g. `96k`)
+- **Auto visitor on sign-up** — `ACCESS_ON_CREATE` set to `true` or `1`: every new user after the first gets role **`visitor`** (library access) instead of the default **`user`**
 
 ## Running the app
 
@@ -91,9 +92,9 @@ Deploy on any host that provides Node.js, your PostgreSQL database, and the exte
 
 ## User roles
 
-After a user signs up with email, their `role` field may be empty. The app only grants **library / playlist** access when the role includes permission for the “gramophone” area (for example `visitor` or `dj`). Without a suitable role, users are redirected to a limited-access page.
+The **first user** created on an empty database (any method: Discord OAuth, email sign-up, etc.) is automatically assigned the **`admin`** role.
 
-For the **first** administrator on a fresh instance, set `role` on the `user` table in PostgreSQL (e.g. to `admin`) for that account. Typical values: `visitor` (library access), `dj` (library + mix management), `admin` (full admin plugin capabilities).
+Everyone after that gets the Better Auth admin plugin default role **`user`** (no “gramophone” access) unless **`ACCESS_ON_CREATE`** is set to **`true`** or **`1`** in the environment: then they are assigned **`visitor`** instead, so they can use the library without manual promotion. Otherwise, limited-access users need an admin to assign **`visitor`**, **`dj`**, or **`admin`** (e.g. from the admin UI).
 
 ## Expired mixes cleanup
 
